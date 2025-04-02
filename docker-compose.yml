@@ -16,7 +16,7 @@ services:
     restart: always
 
   db:
-    image: 2socnsbd.mirror.aliyuncs.com/library/mariadb:latest
+    image: cba6e3a6963e4f439e361d983145a9ec.mirror.swr.myhuaweicloud.com/library/mariadb:latest
     environment:
       - MYSQL_ROOT_PASSWORD=root_password
       - MYSQL_DATABASE=blog
@@ -27,7 +27,7 @@ services:
     restart: always
 
   nginx:
-    image: 2socnsbd.mirror.aliyuncs.com/library/nginx:alpine
+    image: cba6e3a6963e4f439e361d983145a9ec.mirror.swr.myhuaweicloud.com/library/nginx:alpine
     ports:
       - '80:80'
     volumes:
