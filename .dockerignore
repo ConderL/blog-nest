@@ -1,0 +1,31 @@
+# 依赖
+node_modules
+npm-debug.log
+pnpm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# 构建输出
+dist
+build
+coverage
+
+# 环境配置
+.env
+.env.*
+!.env.example
+
+# 版本控制
+.git
+.gitignore
+
+# 编辑器配置
+.idea
+.vscode
+*.swp
+*.swo
+
+# 其他
+README.md
+LICENSE
+*.md 
