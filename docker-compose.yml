@@ -15,7 +15,7 @@ services:
     restart: always
 
   db:
-    image: ccr.ccs.tencentyun.com/library/mariadb:latest
+    image: mariadb:latest
     environment:
       - MYSQL_ROOT_PASSWORD=root_password
       - MYSQL_DATABASE=blog
@@ -26,7 +26,7 @@ services:
     restart: always
 
   nginx:
-    image: ccr.ccs.tencentyun.com/library/nginx:alpine
+    image: nginx:alpine
     ports:
       - '80:80'
     volumes:
