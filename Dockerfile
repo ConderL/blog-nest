@@ -1,5 +1,5 @@
 # 构建阶段
-FROM 2socnsbd.mirror.aliyuncs.com/library/node:18-alpine AS builder
+FROM node:18-alpine AS builder
 WORKDIR /app
 RUN npm install -g pnpm
 COPY package.json pnpm-lock.yaml ./
@@ -8,7 +8,7 @@ COPY . .
 RUN pnpm build
 
 # 运行阶段
-FROM 2socnsbd.mirror.aliyuncs.com/library/node:18-alpine
+FROM node:18-alpine
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules

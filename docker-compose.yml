@@ -16,7 +16,7 @@ services:
     restart: always
 
   db:
-    image: 2socnsbd.mirror.aliyuncs.com/library/mariadb:latest
+    image: mariadb:latest
     environment:
       - MYSQL_ROOT_PASSWORD=root_password
       - MYSQL_DATABASE=blog
@@ -27,7 +27,7 @@ services:
     restart: always
 
   nginx:
-    image: 2socnsbd.mirror.aliyuncs.com/library/nginx:alpine
+    image: nginx:alpine
     ports:
       - '80:80'
     volumes:
