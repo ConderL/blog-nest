@@ -11,18 +11,36 @@ services:
       - DB_DATABASE=blog
       - JWT_SECRET=your-secret-key
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     restart: always
+    command: ['sh', '-c', 'sleep 20 && node dist/main.js'] # 增加延迟
 
   db:
     image: mariadb:latest
     environment:
-      - MYSQL_ROOT_PASSWORD=root_password
+      - MYSQL_ROOT_PASSWORD=wdrx4100
       - MYSQL_DATABASE=blog
-      - MYSQL_USER=blog_user
-      - MYSQL_PASSWORD=your_password
+      - MYSQL_USER=blog_conder
+      - MYSQL_PASSWORD=wdrx4100
     volumes:
       - db_data:/var/lib/mysql
+    healthcheck: # 强化健康检查
+      test:
+        [
+          'CMD',
+          'mysqladmin',
+          'ping',
+          '-h',
+          'localhost',
+          '-u',
+          'root',
+          '-pwdrx4100',
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s # 延长初始化等待时间
     restart: always
 
   nginx:

@@ -1,46 +1,44 @@
-import {
-  Entity,
-  Column,
-  PrimaryGeneratedColumn,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, Column } from 'typeorm';
+import { BaseEntity } from '../../../common/entities/base.entity';
 
-@Entity('t_user')
-export class User {
-  @PrimaryGeneratedColumn()
-  id: number;
+@Entity('users')
+export class User extends BaseEntity {
+  @Column({ length: 50 })
+  nickname: string;
 
   @Column({ length: 50, unique: true })
   username: string;
 
-  @Column({ length: 100 })
+  @Column({ select: false })
   password: string;
 
-  @Column({ length: 50, nullable: true })
-  nickname: string;
-
-  @Column({ length: 50, nullable: true })
+  @Column({ nullable: true })
   avatar: string;
 
-  @Column({ length: 50, nullable: true })
+  @Column({ name: 'web_site', nullable: true })
+  webSite: string;
+
+  @Column({ type: 'text', nullable: true })
+  intro: string;
+
+  @Column({ length: 100, nullable: true })
   email: string;
+
+  @Column({ name: 'ip_address', nullable: true })
+  ipAddress: string;
+
+  @Column({ name: 'ip_source', nullable: true })
+  ipSource: string;
+
+  @Column({ name: 'login_type', default: 1 })
+  loginType: number;
+
+  @Column({ name: 'is_disable', default: 0 })
+  isDisable: number;
+
+  @Column({ name: 'login_time', type: 'timestamp', nullable: true })
+  loginTime: Date;
 
   @Column({ default: 1 })
   status: number;
-
-  @Column({ length: 50, nullable: true })
-  ipAddress: string;
-
-  @Column({ length: 50, nullable: true })
-  ipSource: string;
-
-  @Column({ length: 50, nullable: true })
-  lastLoginTime: string;
-
-  @CreateDateColumn()
-  createTime: Date;
-
-  @UpdateDateColumn()
-  updateTime: Date;
 }

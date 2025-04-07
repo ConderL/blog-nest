@@ -1,11 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import {
-  ExceptionFilter,
-  Catch,
-  ArgumentsHost,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
 import { BusinessException } from './business.exception';
 
 @Catch(HttpException)

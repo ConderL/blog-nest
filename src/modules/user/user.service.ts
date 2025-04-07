@@ -10,7 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 export class UserService {
   constructor(
     @InjectRepository(User)
-    private userRepository: Repository<User>,
+    private readonly userRepository: Repository<User>,
     private jwtService: JwtService,
   ) {}
 
@@ -23,10 +23,7 @@ export class UserService {
       throw new Error('用户不存在');
     }
 
-    const isPasswordValid = await bcrypt.compare(
-      loginDto.password,
-      user.password,
-    );
+    const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
     if (!isPasswordValid) {
       throw new Error('密码错误');
     }
@@ -50,7 +47,40 @@ export class UserService {
     };
   }
 
-  async findOne(username: string): Promise<User> {
+  async findByUsername(username: string): Promise<User> {
     return this.userRepository.findOne({ where: { username } });
+  }
+
+  async findById(id: number): Promise<User> {
+    return this.userRepository.findOne({ where: { id } });
+  }
+
+  async create(user: Partial<User>): Promise<User> {
+    if (user.password) {
+      user.password = await bcrypt.hash(user.password, 10);
+    }
+    const newUser = this.userRepository.create(user);
+    return this.userRepository.save(newUser);
+  }
+
+  async update(id: number, user: Partial<User>): Promise<User> {
+    if (user.password) {
+      user.password = await bcrypt.hash(user.password, 10);
+    }
+    await this.userRepository.update(id, user);
+    return this.findById(id);
+  }
+
+  async validateUser(username: string, password: string): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { username },
+      select: ['id', 'username', 'password', 'nickname', 'avatar'],
+    });
+
+    if (user && (await bcrypt.compare(password, user.password))) {
+      delete user.password;
+      return user;
+    }
+    return null;
   }
 }

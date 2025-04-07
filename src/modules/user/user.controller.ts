@@ -1,7 +1,12 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
+  Put,
+  Param,
+  UseGuards,
+  Request,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
@@ -9,11 +14,30 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
+import { User } from './entities/user.entity';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('用户管理')
-@Controller('user')
+@Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  async getProfile(@Request() req) {
+    return this.userService.findById(req.user.id);
+  }
+
+  @Put(':id')
+  @UseGuards(JwtAuthGuard)
+  async update(@Param('id') id: number, @Body() user: Partial<User>) {
+    return this.userService.update(id, user);
+  }
+
+  @Post('register')
+  async register(@Body() user: Partial<User>) {
+    return this.userService.create(user);
+  }
 
   @Post('login')
   @ApiOperation({
