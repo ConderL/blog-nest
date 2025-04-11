@@ -46,3 +46,5 @@ pm2.log
 # Nginx
 nginx/error.log
 nginx/access.log
+
+db_data/mysql.sock

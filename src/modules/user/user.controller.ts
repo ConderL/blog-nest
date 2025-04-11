@@ -36,6 +36,7 @@ export class UserController {
 
   @Post('register')
   async register(@Body() user: Partial<User>) {
+    console.log(user);
     try {
       return await this.userService.create(user);
     } catch (error) {

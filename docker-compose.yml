@@ -6,7 +6,7 @@ services:
     environment:
       - DB_HOST=db
       - DB_PORT=3306
-      - DB_USERNAME=conder
+      - DB_USERNAME=root
       - DB_PASSWORD=wdrx4100
       - DB_DATABASE=blog
       - JWT_SECRET=your-secret-key
@@ -17,11 +17,11 @@ services:
     command: ['sh', '-c', 'sleep 20 && node dist/main.js'] # 增加延迟
 
   db:
-    image: mariadb:latest
+    image: mysql:latest
     environment:
       - MYSQL_ROOT_PASSWORD=wdrx4100
       - MYSQL_DATABASE=blog
-      - MYSQL_USER=conder
+      - MYSQL_USER=root
       - MYSQL_PASSWORD=wdrx4100
     volumes:
       - ./db_data:/var/lib/mysql
@@ -36,7 +36,7 @@ services:
     #       '-h',
     #       'localhost',
     #       '-u',
-    #       'conder',
+    #       'root',
     #       '-pwdrx4100',
     #     ]
     #   interval: 5s

@@ -56,6 +56,7 @@ export class UserService {
   }
 
   async create(user: Partial<User>): Promise<User> {
+    console.log(await this.userRepository.find());
     const existingUser = await this.userRepository.findOne({ where: { username: user.username } });
     if (existingUser) {
       throw new Error('用户名已存在');
