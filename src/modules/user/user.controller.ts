@@ -18,7 +18,7 @@ import { User } from './entities/user.entity';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('用户管理')
-@Controller('users')
+@Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
@@ -36,7 +36,18 @@ export class UserController {
 
   @Post('register')
   async register(@Body() user: Partial<User>) {
-    return this.userService.create(user);
+    try {
+      return await this.userService.create(user);
+    } catch (error) {
+      console.error('注册错误:', error);
+      throw new HttpException(
+        {
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          error: '注册失败，请检查输入信息或稍后重试',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   @Post('login')
