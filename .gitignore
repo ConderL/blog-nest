@@ -34,10 +34,13 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# Environment variables
+# Environment
 .env
 .env.*
 !.env.example
+
+# Database backups
+/backups
 
 # PM2
 pm2.log

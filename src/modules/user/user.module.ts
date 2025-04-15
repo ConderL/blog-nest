@@ -5,10 +5,18 @@ import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { User } from './entities/user.entity';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Role } from './entities/role.entity';
+import { UserRole } from './entities/user-role.entity';
+import { Menu } from './entities/menu.entity';
+import { RoleMenu } from './entities/role-menu.entity';
+import { RoleService } from './services/role.service';
+import { MenuService } from './services/menu.service';
+import { RoleController } from './controllers/role.controller';
+import { MenuController } from './controllers/menu.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, Role, UserRole, Menu, RoleMenu]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -18,8 +26,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       inject: [ConfigService],
     }),
   ],
-  controllers: [UserController],
-  providers: [UserService],
-  exports: [UserService],
+  controllers: [UserController, RoleController, MenuController],
+  providers: [UserService, RoleService, MenuService],
+  exports: [UserService, RoleService, MenuService],
 })
 export class UserModule {}

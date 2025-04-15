@@ -9,41 +9,45 @@ services:
       - DB_USERNAME=root
       - DB_PASSWORD=wdrx4100
       - DB_DATABASE=blog
-      - JWT_SECRET=your-secret-key
+      - JWT_SECRET=MZPCcTuDFHkAb87fP7veY4YUwuwbI9t4tPcJC4E7pzg
+      - TZ=Asia/Shanghai
     depends_on:
-      - db
-      # condition: service_healthy
+      db:
+        condition: service_healthy
+    networks:
+      - my-network
     restart: always
     command: ['sh', '-c', 'sleep 20 && node dist/main.js'] # 增加延迟
 
   db:
-    image: mysql:latest
+    image: mysql:8.0.31
     environment:
       - MYSQL_ROOT_PASSWORD=wdrx4100
       - MYSQL_DATABASE=blog
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=wdrx4100
+      - TZ=Asia/Shanghai
     volumes:
       - ./db_data:/var/lib/mysql
+      - ./mysql/conf/my.cnf:/etc/mysql/conf.d/my.cnf
     ports:
       - '3306:3306'
-    # healthcheck: # 强化健康检查
-    #   test:
-    #     [
-    #       'CMD',
-    #       'mysql',
-    #       'ping',
-    #       '-h',
-    #       'localhost',
-    #       '-u',
-    #       'root',
-    #       '-pwdrx4100',
-    #     ]
-    #   interval: 5s
-    #   timeout: 10s
-    #   retries: 10
-    #   start_period: 30s # 延长初始化等待时间
+    healthcheck: # 强化健康检查
+      test:
+        [
+          'CMD',
+          'mysqladmin',
+          'ping',
+          '-h',
+          'localhost',
+          '-u',
+          'root',
+          '-pwdrx4100',
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     restart: always
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
 
   nginx:
     image: nginx:alpine
@@ -51,7 +55,16 @@ services:
       - ./nginx/blog.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - app
+    networks:
+      - my-network
+    ports:
+      - '80:80'
+      - '443:443'
     restart: always
 
 volumes:
   db_data:
+
+networks:
+  my-network:
+    driver: bridge
