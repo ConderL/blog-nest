@@ -2,7 +2,7 @@ import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { User } from '../../user/entities/user.entity';
 
-@Entity('blog_files')
+@Entity('t_blog_file')
 export class BlogFile extends BaseEntity {
   @Column({ name: 'file_name' })
   fileName: string;

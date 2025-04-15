@@ -59,14 +59,21 @@ export class MenuService {
    * 获取菜单树
    */
   async findTree(): Promise<Menu[]> {
+    console.log('MenuService.findTree - 开始查询所有菜单');
     const menus = await this.findAll();
-    return this.buildTree(menus);
+    console.log('MenuService.findTree - 查询到菜单数量:', menus.length);
+
+    const tree = this.buildTree(menus);
+    console.log('MenuService.findTree - 构建的菜单树数量:', tree.length);
+
+    return tree;
   }
 
   /**
    * 构建菜单树
    */
   private buildTree(menus: Menu[]): Menu[] {
+    console.log('MenuService.buildTree - 开始构建菜单树，输入菜单数量:', menus.length);
     const result: Menu[] = [];
     const map = {};
 
@@ -88,6 +95,7 @@ export class MenuService {
       }
     });
 
+    console.log('MenuService.buildTree - 构建完成，菜单树根节点数量:', result.length);
     return result;
   }
 
@@ -102,26 +110,47 @@ export class MenuService {
    * 根据角色ID获取菜单
    */
   async findByRoleIds(roleIds: number[]): Promise<Menu[]> {
-    if (roleIds.length === 0) return [];
+    console.log('MenuService.findByRoleIds - 开始查询角色菜单, 角色IDs:', roleIds);
+
+    if (roleIds.length === 0) {
+      console.log('MenuService.findByRoleIds - 角色ID为空，返回空数组');
+      return [];
+    }
 
     // 查询角色拥有的菜单ID
     const roleMenus = await this.roleMenuRepository.find({ where: { roleId: In(roleIds) } });
-    const menuIds = roleMenus.map((rm) => rm.menuId);
+    console.log('MenuService.findByRoleIds - 查询到角色菜单关联数据:', roleMenus.length);
 
-    if (menuIds.length === 0) return [];
+    const menuIds = roleMenus.map((rm) => rm.menuId);
+    console.log('MenuService.findByRoleIds - 提取出菜单ID:', menuIds);
+
+    if (menuIds.length === 0) {
+      console.log('MenuService.findByRoleIds - 菜单ID为空，返回空数组');
+      return [];
+    }
 
     // 查询菜单详情
-    return this.menuRepository.find({
+    const menus = await this.menuRepository.find({
       where: { id: In(menuIds) },
       order: { parentId: 'ASC', orderNum: 'ASC' },
     });
+    console.log('MenuService.findByRoleIds - 查询到菜单数量:', menus.length);
+
+    return menus;
   }
 
   /**
    * 获取角色的菜单树
    */
   async findTreeByRoleIds(roleIds: number[]): Promise<Menu[]> {
+    console.log('MenuService.findTreeByRoleIds - 开始查询角色菜单树, 角色IDs:', roleIds);
+
     const menus = await this.findByRoleIds(roleIds);
-    return this.buildTree(menus);
+    console.log('MenuService.findTreeByRoleIds - 查询到菜单数量:', menus.length);
+
+    const tree = this.buildTree(menus);
+    console.log('MenuService.findTreeByRoleIds - 构建的菜单树数量:', tree.length);
+
+    return tree;
   }
 }

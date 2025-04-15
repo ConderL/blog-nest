@@ -1,6 +1,6 @@
 import { Entity, PrimaryColumn } from 'typeorm';
 
-@Entity('user_roles')
+@Entity('t_user_role')
 export class UserRole {
   @PrimaryColumn({ name: 'user_id' })
   userId: number;

@@ -7,9 +7,12 @@ import {
   AllExceptionsFilter,
   HttpExceptionFilter,
 } from './common/exceptions/http.exception.filter';
+import { DataSource } from 'typeorm';
+import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
 
   // 配置全局管道
   app.useGlobalPipes(
@@ -40,8 +43,43 @@ async function bootstrap() {
   // 允许跨域
   app.enableCors();
 
+  // 检查数据库是否已初始化
+  const dataSource = app.get(DataSource);
+  await checkDatabaseInitialization(dataSource, logger);
+
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   await app.listen(port);
-  console.log(`应用已启动: http://localhost:${port}`);
+  logger.log(`应用已启动: http://localhost:${port}`);
 }
+
+/**
+ * 检查数据库是否已初始化
+ * @param dataSource 数据源连接
+ * @param logger 日志记录器
+ */
+async function checkDatabaseInitialization(dataSource: DataSource, logger: Logger) {
+  try {
+    // 检查数据库中是否有角色表及其数据
+    const roleCount = await dataSource.query('SELECT COUNT(*) as count FROM roles');
+    const hasRoles = roleCount[0].count > 0;
+
+    // 检查数据库中是否有菜单表及其数据
+    const menuCount = await dataSource.query('SELECT COUNT(*) as count FROM menus');
+    const hasMenus = menuCount[0].count > 0;
+
+    if (!hasRoles || !hasMenus) {
+      logger.warn('==========================================================');
+      logger.warn('警告: 数据库初始化不完整，部分功能可能无法正常使用');
+      logger.warn('请运行以下命令初始化数据库:');
+      logger.warn('npm run db:init');
+      logger.warn('==========================================================');
+    } else {
+      logger.log('数据库初始化检查通过');
+    }
+  } catch (error) {
+    logger.error('数据库初始化检查失败，请确保数据表已正确创建');
+    logger.error(`错误详情: ${error.message}`);
+  }
+}
+
 bootstrap();

@@ -1,6 +1,6 @@
 import { Entity, PrimaryColumn } from 'typeorm';
 
-@Entity('role_menus')
+@Entity('t_role_menu')
 export class RoleMenu {
   @PrimaryColumn({ name: 'role_id' })
   roleId: number;

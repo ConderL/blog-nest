@@ -1,22 +1,37 @@
-FROM node:18-alpine AS builder
+FROM node:18-alpine AS build
 WORKDIR /app
 
-# 设置 npm 镜像源
-RUN npm config set registry https://registry.npmmirror.com
-RUN npm install -g pnpm
-RUN pnpm config set registry https://registry.npmmirror.com
+# 复制package.json和锁文件
+COPY package*.json ./
+COPY pnpm-lock.yaml ./
 
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install
-RUN pnpm add @fastify/static
+# 安装依赖项
+RUN npm install -g pnpm && pnpm install
+
+# 复制所有源代码
 COPY . .
-RUN pnpm build
 
-# 运行阶段
+# 构建应用程序
+RUN pnpm run build
+
 FROM node:18-alpine
 WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY package.json .
+
+# 复制package.json和锁文件
+COPY package*.json ./
+COPY pnpm-lock.yaml ./
+
+# 安装生产依赖
+RUN npm install -g pnpm && pnpm install --production
+
+# 从构建阶段复制构建的应用
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/.env ./.env
+
+# 添加初始化脚本
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 EXPOSE 3000
-CMD ["node", "dist/main.js"]
+
+ENTRYPOINT ["/docker-entrypoint.sh"]

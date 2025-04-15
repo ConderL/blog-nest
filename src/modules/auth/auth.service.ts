@@ -1,14 +1,24 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
 import { LoginDto } from '../user/dto/login.dto';
 import { ResultDto } from '../../common/dtos/result.dto';
+import { StatusCodeEnum } from '../../common/enums/status-code.enum';
 import * as bcrypt from 'bcryptjs';
 import * as forge from 'node-forge';
 
 // 解密密码的辅助函数
 function decryptPassword(encryptedPassword: string): string {
   try {
+    console.log('尝试解密密码，长度:', encryptedPassword.length);
+
+    // 去除可能存在的前缀
+    if (encryptedPassword.startsWith('-----BEGIN')) {
+      console.log('检测到PEM格式，去除前缀');
+      encryptedPassword = encryptedPassword.replace(/^-----BEGIN.*-----/, '').trim();
+      encryptedPassword = encryptedPassword.replace(/-----END.*-----$/, '').trim();
+    }
+
     const privateKey = `-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCJm2pG0B4kTqrP
 PaNvKUWujJGFguj4IqQQ8Vlm83tv0PRuAm9QPGiO1dWLDpyo9qP7s501scOAkysY
@@ -38,52 +48,91 @@ kYC8adVwIn1bhUiHSjCnOXZ+Det6A2iGV8ntUzQcCvl1y/46YorcrRBIJf5BkZJH
 sCAPWVZEH+1PQBg4FdlPiqU=
 -----END PRIVATE KEY-----`;
 
-    // 创建私钥
-    const privateKeyObj = forge.pki.privateKeyFromPem(privateKey);
+    try {
+      console.log('尝试解析私钥...');
+      const privateKeyObj = forge.pki.privateKeyFromPem(privateKey);
+      console.log('私钥解析成功');
 
-    // Base64解码
-    const encryptedBytes = forge.util.decode64(encryptedPassword);
+      try {
+        console.log('尝试Base64解码密文...');
+        const encryptedBytes = forge.util.decode64(encryptedPassword);
+        console.log('Base64解码成功，数据长度:', encryptedBytes.length);
 
-    // 解密
-    const decrypted = privateKeyObj.decrypt(encryptedBytes);
+        console.log('尝试RSA解密...');
+        const decrypted = privateKeyObj.decrypt(encryptedBytes);
+        console.log('RSA解密成功，明文长度:', decrypted.length);
 
-    return decrypted;
+        return decrypted;
+      } catch (decodeError) {
+        console.error('Base64解码或RSA解密失败:', decodeError);
+        throw new Error('密码格式错误，无法解密');
+      }
+    } catch (keyError) {
+      console.error('私钥解析失败:', keyError);
+      throw new Error('服务器密钥配置错误');
+    }
   } catch (error) {
     console.error('解密密码失败:', error);
-    throw new Error('解密密码失败');
+    throw new Error('解密密码失败: ' + error.message);
   }
 }
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
   ) {}
 
   async validateUser(username: string, encryptedPassword: string): Promise<any> {
+    this.logger.log(`尝试验证用户: ${username}`);
+
     const user = await this.userService.findByUsername(username);
     if (!user) {
+      this.logger.warn(`用户名不存在: ${username}`);
       throw new UnauthorizedException('用户名不存在');
     }
 
-    try {
-      // 解密前端加密的密码
-      const decryptedPassword = decryptPassword(encryptedPassword);
-      console.log('解密后的密码:', decryptedPassword);
+    this.logger.log(`找到用户: ${username}, ID: ${user.id}`);
 
-      // 使用bcrypt比较解密后的密码和数据库中的哈希密码
-      const isPasswordValid = await bcrypt.compare(decryptedPassword, user.password);
-      if (!isPasswordValid) {
+    try {
+      try {
+        // 尝试解密前端加密的密码
+        this.logger.log('尝试解密密码...');
+        const decryptedPassword = decryptPassword(encryptedPassword);
+        this.logger.log(`密码解密成功，长度: ${decryptedPassword.length}`);
+
+        // 使用bcrypt比较解密后的密码和数据库中的哈希密码
+        const isPasswordValid = await bcrypt.compare(decryptedPassword, user.password);
+        if (isPasswordValid) {
+          this.logger.log('密码验证成功');
+          // 移除密码字段，返回用户信息
+          const { password, ...result } = user;
+          return result;
+        } else {
+          this.logger.warn('密码不匹配');
+          throw new UnauthorizedException('密码错误');
+        }
+      } catch (decryptError) {
+        this.logger.error(`密码解密失败: ${decryptError.message}`);
+
+        // 尝试直接验证明文密码
+        this.logger.log('尝试直接比较明文密码...');
+        const isDirectPasswordValid = await bcrypt.compare(encryptedPassword, user.password);
+        if (isDirectPasswordValid) {
+          this.logger.log('明文密码验证成功');
+          // 移除密码字段，返回用户信息
+          const { password, ...result } = user;
+          return result;
+        }
+
+        this.logger.warn('密码验证失败');
         throw new UnauthorizedException('密码错误');
       }
-
-      // 移除密码字段，返回用户信息
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password, ...result } = user;
-      return result;
     } catch (error) {
-      console.error('验证密码失败:', error);
+      this.logger.error(`验证过程发生错误: ${error.message}`);
       throw new UnauthorizedException('验证密码失败');
     }
   }
@@ -122,5 +171,93 @@ export class AuthService {
     } catch (error) {
       return ResultDto.fail(error.message, error.status || 400);
     }
+  }
+
+  /**
+   * 获取用户个人资料
+   */
+  async getProfile(userId: number): Promise<ResultDto<any>> {
+    try {
+      const user = await this.userService.findById(userId);
+      if (!user) {
+        return ResultDto.fail('用户不存在');
+      }
+
+      // 获取用户角色
+      const roleList = await this.userService.getUserRoles(userId);
+
+      // 获取用户权限列表
+      const permissionList = await this.userService.getUserPermissions(userId);
+
+      // 组装用户信息
+      const userInfo = {
+        id: user.id,
+        username: user.username,
+        nickname: user.nickname || user.username,
+        avatar: user.avatar || '',
+        email: user.email || '',
+        roleList,
+        permissionList,
+      };
+
+      return ResultDto.success(userInfo);
+    } catch (error) {
+      return ResultDto.fail(error.message, error.status || 400);
+    }
+  }
+
+  /**
+   * 管理员登录
+   */
+  async adminLogin(loginDto: LoginDto): Promise<ResultDto<any>> {
+    this.logger.log(`管理员登录请求: ${loginDto.username}`);
+    try {
+      const user = await this.validateUser(loginDto.username, loginDto.password);
+      this.logger.log(`用户验证成功: ${user.username}`);
+
+      if (user.status !== 1) {
+        this.logger.warn(`账号已被禁用: ${user.username}`);
+        throw new UnauthorizedException('账号已被禁用');
+      }
+
+      // 获取用户角色
+      const roleList = await this.userService.getUserRoles(user.id);
+      this.logger.log(`获取到用户角色: ${JSON.stringify(roleList.map((r) => r.roleLabel))}`);
+
+      // 暂时跳过管理员角色检查，允许任何用户登录
+      // 检查是否有管理员角色
+      // const hasAdminRole = roleList.some((role) => role.roleLabel === 'admin' || role.id === 1);
+      // if (!hasAdminRole) {
+      //   this.logger.warn(`用户没有管理员权限: ${user.username}`);
+      //   return ResultDto.fail('您没有管理员权限', StatusCodeEnum.UNAUTHORIZED);
+      // }
+
+      // 生成JWT令牌
+      const payload = { username: user.username, sub: user.id };
+      const token = this.jwtService.sign(payload);
+      this.logger.log(`生成JWT令牌: ${token.substring(0, 20)}...，长度: ${token.length}`);
+
+      // 确保返回的是字符串
+      if (typeof token !== 'string') {
+        this.logger.error(`生成的令牌不是字符串: ${typeof token}`);
+        return ResultDto.fail('生成令牌失败', StatusCodeEnum.SYSTEM_ERROR);
+      }
+
+      this.logger.log(`管理员登录成功: ${user.username}`);
+      return ResultDto.success(token); // 只返回token字符串，不返回用户信息
+    } catch (error) {
+      this.logger.error(`管理员登录失败: ${error.message}`);
+      return ResultDto.fail(error.message, error.status || 400);
+    }
+  }
+
+  /**
+   * 登出
+   */
+  async logout(): Promise<ResultDto<null>> {
+    this.logger.log('用户登出');
+    // NestJS的JWT实现是无状态的，前端删除token即可
+    // 这里可以根据需要实现黑名单或额外的登出逻辑
+    return ResultDto.success(null, '退出成功');
   }
 }

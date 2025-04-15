@@ -1,7 +1,7 @@
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
-@Entity('site_config')
+@Entity('t_site_config')
 export class SiteConfig extends BaseEntity {
   @Column({ name: 'config_name' })
   configName: string;

@@ -1,7 +1,7 @@
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
-@Entity('menus')
+@Entity('t_menu')
 export class Menu extends BaseEntity {
   @Column({ length: 50 })
   name: string;

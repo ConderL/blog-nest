@@ -1,79 +1,115 @@
 import { Request } from 'express';
+import axios from 'axios';
+import { getCurrentRequest } from './request.util';
 
 /**
- * 获取客户端IP地址
- * @param request 请求对象
+ * IP工具类
+ * 提供IP地址相关的工具方法，如获取客户端IP、判断是否为内网IP等
  */
-export function getClientIp(request: Request): string {
-  // 获取 X-Forwarded-For 头部信息
-  const xForwardedFor = request.headers['x-forwarded-for'] as string;
-  if (xForwardedFor) {
-    // 多层代理时，取第一个 IP
-    return xForwardedFor.split(',')[0].trim();
+export class IPUtil {
+  /**
+   * 获取客户端IP地址
+   * @param request 请求对象
+   * @returns 客户端IP地址
+   */
+  static getClientIp(request: Request): string {
+    // 尝试从各种header中获取
+    let ip: string = null;
+
+    // 检查X-Forwarded-For头
+    if (request.headers['x-forwarded-for']) {
+      const forwardedIps = request.headers['x-forwarded-for'];
+      if (Array.isArray(forwardedIps)) {
+        ip = forwardedIps[0];
+      } else {
+        ip = forwardedIps.split(',')[0].trim();
+      }
+    }
+
+    // 检查X-Real-IP头
+    if (!ip && request.headers['x-real-ip']) {
+      ip = request.headers['x-real-ip'] as string;
+    }
+
+    // 从连接中获取
+    if (!ip && request.connection && request.connection.remoteAddress) {
+      ip = request.connection.remoteAddress;
+    }
+
+    // 清理IPv6前缀
+    if (ip && ip.indexOf('::ffff:') !== -1) {
+      ip = ip.substring(7);
+    }
+
+    return ip || '127.0.0.1';
   }
 
-  // 获取 X-Real-IP 头部信息 (Nginx代理通常使用)
-  const xRealIp = request.headers['x-real-ip'] as string;
-  if (xRealIp) {
-    return xRealIp;
-  }
+  /**
+   * 判断是否为内网IP
+   *
+   * @param ip 要检查的IP地址
+   * @returns 是否为内网IP
+   */
+  static isInternalIp(ip: string): boolean {
+    if (!ip) return false;
 
-  // 获取 Proxy-Client-IP
-  const proxyClientIp = request.headers['proxy-client-ip'] as string;
-  if (proxyClientIp) {
-    return proxyClientIp;
-  }
+    // 判断是否是本地回环地址
+    if (ip === '127.0.0.1' || ip === 'localhost' || ip === '::1') {
+      return true;
+    }
 
-  // 获取 WL-Proxy-Client-IP
-  const wlProxyClientIp = request.headers['wl-proxy-client-ip'] as string;
-  if (wlProxyClientIp) {
-    return wlProxyClientIp;
-  }
+    // 内网IP段的正则表达式
+    const patterns = [
+      /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/, // 10.0.0.0 - 10.255.255.255
+      /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/, // 172.16.0.0 - 172.31.255.255
+      /^192\.168\.\d{1,3}\.\d{1,3}$/, // 192.168.0.0 - 192.168.255.255
+    ];
 
-  // 获取 HTTP_CLIENT_IP
-  const httpClientIp = request.headers['http_client_ip'] as string;
-  if (httpClientIp) {
-    return httpClientIp;
-  }
+    // 检查IP是否匹配内网IP段
+    for (const pattern of patterns) {
+      if (pattern.test(ip)) {
+        return true;
+      }
+    }
 
-  // 获取 HTTP_X_FORWARDED_FOR
-  const httpXForwardedFor = request.headers['http_x_forwarded_for'] as string;
-  if (httpXForwardedFor) {
-    return httpXForwardedFor;
-  }
-
-  // 直接获取请求的 IP
-  return request.ip || '127.0.0.1';
-}
-
-/**
- * 判断IP是否为内网IP
- * @param ip IP地址
- */
-export function isInternalIp(ip: string): boolean {
-  // IPv4 内网地址段
-  // 10.0.0.0/8
-  // 172.16.0.0/12
-  // 192.168.0.0/16
-  // 127.0.0.0/8
-
-  // 去除IPv6前缀
-  if (ip.includes('::ffff:')) {
-    ip = ip.substring(7);
-  }
-
-  const ipParts = ip.split('.');
-  if (ipParts.length !== 4) {
     return false;
   }
 
-  const firstOctet = parseInt(ipParts[0], 10);
-  const secondOctet = parseInt(ipParts[1], 10);
+  /**
+   * 获取当前请求对象
+   * @returns 请求对象
+   */
+  static getRequestObject(): Request {
+    return getCurrentRequest();
+  }
 
-  return (
-    firstOctet === 10 || // 10.0.0.0/8
-    (firstOctet === 172 && secondOctet >= 16 && secondOctet <= 31) || // 172.16.0.0/12
-    (firstOctet === 192 && secondOctet === 168) || // 192.168.0.0/16
-    firstOctet === 127 // 127.0.0.0/8
-  );
+  /**
+   * 获取IP地理位置
+   * @param ip IP地址
+   * @returns IP地理位置信息
+   */
+  static async getIpSource(ip: string): Promise<string> {
+    // 如果是内网IP或本地IP，直接返回
+    if (this.isInternalIp(ip) || ip === '127.0.0.1') {
+      return '内网IP';
+    }
+
+    try {
+      // 使用ip-api.com免费API获取IP地理位置
+      const response = await axios.get(`http://ip-api.com/json/${ip}?lang=zh-CN`);
+      const data = response.data;
+
+      if (data.status === 'success') {
+        return `${data.country || ''} ${data.regionName || ''} ${data.city || ''}`;
+      }
+
+      return '未知位置';
+    } catch (error) {
+      console.error('获取IP地址位置失败:', error);
+      return '未知位置';
+    }
+  }
 }
+
+// 导出实例以便于单例使用
+export const IP_UTIL = new IPUtil();

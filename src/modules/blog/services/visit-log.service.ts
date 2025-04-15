@@ -2,8 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { VisitLog } from '../entities/visit-log.entity';
-import { getTodayRange, getRecentDays, formatDate } from '../../../common/utils/date.utils';
+import * as moment from 'moment';
 
+/**
+ * 访问日志服务
+ * 提供访问日志的创建、查询和统计功能
+ */
 @Injectable()
 export class VisitLogService {
   constructor(
@@ -13,67 +17,146 @@ export class VisitLogService {
 
   /**
    * 创建访问日志
+   * @param visitLog 访问日志数据
+   * @returns 创建后的访问日志
    */
   async create(visitLog: Partial<VisitLog>): Promise<VisitLog> {
-    const newLog = this.visitLogRepository.create(visitLog);
-    return this.visitLogRepository.save(newLog);
-  }
-
-  /**
-   * 获取访问日志列表
-   */
-  async findAll(page = 1, limit = 10): Promise<{ items: VisitLog[]; total: number }> {
-    const [items, total] = await this.visitLogRepository.findAndCount({
-      skip: (page - 1) * limit,
-      take: limit,
-      order: { createdAt: 'DESC' },
+    // 确保必填字段都有值
+    const newVisitLog = this.visitLogRepository.create({
+      ipAddress: visitLog.ipAddress || '0.0.0.0',
+      pageUrl: visitLog.pageUrl || '/',
+      ipSource: visitLog.ipSource || '',
+      browser: visitLog.browser || '未知浏览器',
+      os: visitLog.os || '未知系统',
+      referer: visitLog.referer || '',
+      userId: visitLog.userId || null,
     });
-    return { items, total };
+    
+    return await this.visitLogRepository.save(newVisitLog);
   }
 
   /**
-   * 获取今日访问量
+   * 统计今日访问量
+   * @returns 今日访问量
    */
-  async getTodayVisits(): Promise<number> {
-    const todayRange = getTodayRange();
+  async countTodayVisits(): Promise<number> {
+    const today = new Date();
+    const startOfDay = moment(today).startOf('day').toDate();
+    const endOfDay = moment(today).endOf('day').toDate();
 
-    return this.visitLogRepository.count({
+    return await this.visitLogRepository.count({
       where: {
-        createdAt: todayRange,
+        createdAt: Between(startOfDay, endOfDay),
       },
     });
   }
 
   /**
-   * 获取总访问量
+   * 统计总访问量
+   * @returns 总访问量
    */
-  async getTotalVisits(): Promise<number> {
-    return this.visitLogRepository.count();
+  async countTotalVisits(): Promise<number> {
+    return await this.visitLogRepository.count();
   }
 
   /**
-   * 获取近7天的访问统计
+   * 获取最近七天的访问统计
+   * @returns 最近七天的访问统计数据
    */
-  async getWeeklyVisits(): Promise<{ date: string; count: number }[]> {
-    const result = [];
-    const recentDays = getRecentDays(7);
+  async getWeeklyVisitStats(): Promise<{ date: string; count: number }[]> {
+    const today = new Date();
+    const sevenDaysAgo = moment(today).subtract(6, 'days').startOf('day').toDate();
 
-    for (const date of recentDays) {
-      const nextDate = new Date(date);
-      nextDate.setDate(date.getDate() + 1);
+    // 查询最近七天的访问记录
+    const visits = await this.visitLogRepository
+      .createQueryBuilder('visit')
+      .select("DATE_FORMAT(visit.createdAt, '%Y-%m-%d')", 'date')
+      .addSelect('COUNT(visit.id)', 'count')
+      .where('visit.createdAt >= :sevenDaysAgo', { sevenDaysAgo })
+      .groupBy('date')
+      .orderBy('date', 'ASC')
+      .getRawMany();
 
-      const count = await this.visitLogRepository.count({
-        where: {
-          createdAt: Between(date, nextDate),
-        },
-      });
-
-      result.push({
-        date: formatDate(date),
-        count,
-      });
+    // 生成最近七天的日期列表
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+      const date = moment(sevenDaysAgo).add(i, 'days').format('YYYY-MM-DD');
+      dates.push(date);
     }
 
-    return result;
+    // 合并查询结果和日期列表，确保每一天都有数据
+    return dates.map((date) => {
+      const found = visits.find((v) => v.date === date);
+      return {
+        date,
+        count: found ? parseInt(found.count) : 0,
+      };
+    });
+  }
+
+  /**
+   * 分页查询访问日志
+   * @param page 页码
+   * @param limit 每页数量
+   * @returns 访问日志列表及总数
+   */
+  async findAll(page: number = 1, limit: number = 10): Promise<[VisitLog[], number]> {
+    return this.visitLogRepository.findAndCount({
+      skip: (page - 1) * limit,
+      take: limit,
+      order: {
+        id: 'DESC',
+      },
+    });
+  }
+
+  /**
+   * 获取操作系统统计
+   * @returns 操作系统分布统计
+   */
+  async getOsStats(): Promise<any[]> {
+    const osData = await this.visitLogRepository
+      .createQueryBuilder('visitLog')
+      .select('visitLog.os', 'os')
+      .addSelect('COUNT(visitLog.id)', 'count')
+      .groupBy('visitLog.os')
+      .getRawMany();
+
+    return osData.map((item) => ({
+      name: item.os || '未知',
+      value: parseInt(item.count),
+    }));
+  }
+
+  /**
+   * 获取浏览器统计
+   * @returns 浏览器分布统计
+   */
+  async getBrowserStats(): Promise<any[]> {
+    const browserData = await this.visitLogRepository
+      .createQueryBuilder('visitLog')
+      .select('visitLog.browser', 'browser')
+      .addSelect('COUNT(visitLog.id)', 'count')
+      .groupBy('visitLog.browser')
+      .getRawMany();
+
+    return browserData.map((item) => ({
+      name: item.browser || '未知',
+      value: parseInt(item.count),
+    }));
+  }
+
+  /**
+   * 删除指定天数之前的日志
+   * @param days 天数，默认30天
+   */
+  async deleteOldLogs(days: number = 30): Promise<void> {
+    const cutoffDate = moment().subtract(days, 'days').toDate();
+
+    await this.visitLogRepository
+      .createQueryBuilder()
+      .delete()
+      .where('createdAt < :cutoffDate', { cutoffDate })
+      .execute();
   }
 }

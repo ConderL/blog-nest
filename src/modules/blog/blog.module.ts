@@ -14,6 +14,7 @@ import { BlogFile } from './entities/blog-file.entity';
 import { Friend } from './entities/friend.entity';
 import { SiteConfig } from './entities/site-config.entity';
 import { VisitLog } from './entities/visit-log.entity';
+import { User } from '../user/entities/user.entity';
 
 // 服务
 import { ArticleService } from './services/article.service';
@@ -25,6 +26,7 @@ import { FriendService } from './services/friend.service';
 import { SiteConfigService } from './services/site-config.service';
 import { VisitLogService } from './services/visit-log.service';
 import { SearchService } from './services/search.service';
+import { BlogInfoService } from './services/blog-info.service';
 
 // 控制器
 import { ArticleController } from './controllers/article.controller';
@@ -36,7 +38,15 @@ import { FriendController } from './controllers/friend.controller';
 import { SiteConfigController } from './controllers/site-config.controller';
 import { VisitLogController } from './controllers/visit-log.controller';
 import { SearchController } from './controllers/search.controller';
+import { BlogInfoController } from './controllers/blog-info.controller';
 
+// 拦截器
+import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interceptor';
+
+/**
+ * 博客模块
+ * 包含博客信息和访问日志相关功能
+ */
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -49,6 +59,7 @@ import { SearchController } from './controllers/search.controller';
       Friend,
       SiteConfig,
       VisitLog,
+      User,
     ]),
     MulterModule.register({
       storage: diskStorage({
@@ -72,6 +83,7 @@ import { SearchController } from './controllers/search.controller';
     SiteConfigController,
     VisitLogController,
     SearchController,
+    BlogInfoController,
   ],
   providers: [
     ArticleService,
@@ -83,6 +95,8 @@ import { SearchController } from './controllers/search.controller';
     SiteConfigService,
     VisitLogService,
     SearchService,
+    BlogInfoService,
+    VisitLogInterceptor,
   ],
   exports: [
     ArticleService,
@@ -94,6 +108,8 @@ import { SearchController } from './controllers/search.controller';
     SiteConfigService,
     VisitLogService,
     SearchService,
+    BlogInfoService,
+    VisitLogInterceptor,
   ],
 })
 export class BlogModule {}

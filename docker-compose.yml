@@ -17,7 +17,7 @@ services:
     networks:
       - my-network
     restart: always
-    command: ['sh', '-c', 'sleep 20 && node dist/main.js'] # 增加延迟
+    # 入口脚本会处理数据库连接和初始化
 
   db:
     image: mysql:8.0.31

@@ -3,11 +3,12 @@ import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Reflector } from '@nestjs/core';
 import { OPERATION_LOG_KEY } from '../decorators/operation-log.decorator';
-import { getClientIp } from '../utils/ip.util';
+import { IPUtil } from '../utils/ip.util';
 import { LogService } from '../../modules/log/log.service';
 
 /**
  * 操作日志拦截器
+ * 用于记录用户操作日志
  */
 @Injectable()
 export class OperationLogInterceptor implements NestInterceptor {
@@ -28,53 +29,48 @@ export class OperationLogInterceptor implements NestInterceptor {
 
     const request = context.switchToHttp().getRequest();
     const user = request.user; // 由JWT策略注入
-    const { ip, method, path, body, query } = request;
+    const { url, method } = request;
     const userAgent = request.headers['user-agent'];
-    const startTime = Date.now();
+    const ip = IPUtil.getClientIp(request);
 
     return next.handle().pipe(
       tap({
         next: (data) => {
-          const responseTime = Date.now() - startTime;
-
+          // 记录操作成功日志
           try {
-            // 记录操作日志
             this.logService.recordOperation({
               userId: user?.id,
-              username: user?.username || '匿名用户',
-              type: operationType,
-              method,
-              path,
-              ip: getClientIp(request),
+              username: user?.username || '未登录用户',
+              ip,
               userAgent,
-              params: JSON.stringify({ body, query }),
-              result: JSON.stringify(data),
-              time: responseTime,
+              path: url,
+              method,
+              type: operationType,
+              params: JSON.stringify(request.body),
+              result: JSON.stringify(data).substring(0, 500), // 限制长度
+              status: 1, // 成功
             });
           } catch (error) {
             this.logger.error(`记录操作日志失败: ${error.message}`, error.stack);
           }
         },
         error: (error) => {
-          const responseTime = Date.now() - startTime;
-
+          // 记录操作失败日志
           try {
-            // 记录操作失败日志
             this.logService.recordOperation({
               userId: user?.id,
-              username: user?.username || '匿名用户',
-              type: operationType,
-              method,
-              path,
-              ip: getClientIp(request),
+              username: user?.username || '未登录用户',
+              ip,
               userAgent,
-              params: JSON.stringify({ body, query }),
+              path: url,
+              method,
+              type: operationType,
+              params: JSON.stringify(request.body),
               result: JSON.stringify({
-                code: error.status || 500,
-                message: error.message || '未知错误',
-              }),
-              time: responseTime,
-              status: 0, // 失败状态
+                message: error.message,
+                stack: process.env.NODE_ENV === 'production' ? null : error.stack,
+              }).substring(0, 500),
+              status: 0, // 失败
             });
           } catch (logError) {
             this.logger.error(`记录操作日志失败: ${logError.message}`, logError.stack);

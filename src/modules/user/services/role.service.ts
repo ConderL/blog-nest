@@ -73,19 +73,20 @@ export class RoleService {
   /**
    * 分配角色菜单权限
    */
-  async assignMenus(roleId: number, menuIds: number[]): Promise<void> {
-    // 先删除原有权限
+  async assignRoleMenus(roleId: number, menuIds: number[]): Promise<void> {
+    // 先删除该角色的所有菜单关联
     await this.roleMenuRepository.delete({ roleId });
 
-    // 添加新权限
-    const roleMenus = menuIds.map((menuId) => ({
-      roleId,
-      menuId,
-    }));
+    // 没有菜单权限，直接返回
+    if (menuIds.length === 0) return;
 
-    if (roleMenus.length > 0) {
-      await this.roleMenuRepository.insert(roleMenus);
-    }
+    // 创建新的角色菜单关联
+    const roleMenus = menuIds.map((menuId) => {
+      return this.roleMenuRepository.create({ roleId, menuId });
+    });
+
+    // 批量保存
+    await this.roleMenuRepository.save(roleMenus);
   }
 
   /**

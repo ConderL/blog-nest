@@ -1,6 +1,6 @@
 import { Entity, Column, PrimaryColumn } from 'typeorm';
 
-@Entity('article_tags')
+@Entity('t_article_tag')
 export class ArticleTag {
   @PrimaryColumn({ name: 'article_id' })
   articleId: number;

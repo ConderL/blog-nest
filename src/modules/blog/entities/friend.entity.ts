@@ -1,7 +1,7 @@
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
-@Entity('friends')
+@Entity('t_friend')
 export class Friend extends BaseEntity {
   @Column({ name: 'link_name', length: 50 })
   linkName: string;

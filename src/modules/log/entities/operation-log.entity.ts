@@ -4,7 +4,7 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 /**
  * 操作日志实体
  */
-@Entity('operation_log')
+@Entity('t_operation_log')
 export class OperationLog extends BaseEntity {
   /**
    * 操作用户ID
