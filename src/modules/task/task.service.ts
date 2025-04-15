@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, SchedulerRegistry } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
+import { Repository, Between, LessThan } from 'typeorm';
 import { Article } from '../blog/entities/article.entity';
-import { VisitLog } from '../blog/entities/visit-log.entity';
+import { VisitLog } from '../log/entities/visit-log.entity';
 import {
   getBeforeDays,
   getHourRange,
@@ -16,12 +16,14 @@ import * as path from 'path';
 import * as moment from 'moment';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import * as config from '../../config/configuration';
 
 const execAsync = promisify(exec);
 
 @Injectable()
 export class TaskService {
   private readonly logger = new Logger(TaskService.name);
+  private readonly backupDir = path.join(process.cwd(), 'backups');
 
   constructor(
     private schedulerRegistry: SchedulerRegistry,
@@ -31,6 +33,10 @@ export class TaskService {
     private readonly visitLogRepository: Repository<VisitLog>,
   ) {
     this.logger.log('TaskService initialized');
+    // 确保备份目录存在
+    if (!fs.existsSync(this.backupDir)) {
+      fs.mkdirSync(this.backupDir, { recursive: true });
+    }
   }
 
   /**
@@ -38,48 +44,11 @@ export class TaskService {
    */
   @Cron('0 0 3 * * *')
   async handleDatabaseBackup() {
-    this.logger.log('执行数据库备份');
-    try {
-      const backupDir = path.join(process.cwd(), 'backups');
-      if (!fs.existsSync(backupDir)) {
-        fs.mkdirSync(backupDir, { recursive: true });
-      }
+    this.logger.log('执行定时数据库备份...');
+    await this.performBackup(`backup_${moment().format('YYYY-MM-DD_HH-mm-ss')}.sql`);
 
-      const timestamp = moment().format('YYYY-MM-DD_HH-mm-ss');
-      const backupFileName = `backup_${timestamp}.sql`;
-      const backupFilePath = path.join(backupDir, backupFileName);
-
-      // 使用环境变量获取数据库连接信息
-      const dbHost = process.env.DB_HOST || 'localhost';
-      const dbPort = process.env.DB_PORT || '3306';
-      const dbUser = process.env.DB_USERNAME || 'root';
-      const dbPassword = process.env.DB_PASSWORD || 'root';
-      const dbName = process.env.DB_DATABASE || 'blog';
-
-      // 执行备份命令
-      const command = `mysqldump -h ${dbHost} -P ${dbPort} -u ${dbUser} -p${dbPassword} ${dbName} > ${backupFilePath}`;
-      await execAsync(command);
-
-      this.logger.log(`数据库备份成功：${backupFilePath}`);
-
-      // 删除7天前的备份
-      const files = fs.readdirSync(backupDir);
-      const now = moment();
-
-      for (const file of files) {
-        if (file.startsWith('backup_') && file.endsWith('.sql')) {
-          const filePath = path.join(backupDir, file);
-          const fileDate = moment(file.substring(7, 17), 'YYYY-MM-DD');
-
-          if (now.diff(fileDate, 'days') > 7) {
-            fs.unlinkSync(filePath);
-            this.logger.log(`删除过期备份：${filePath}`);
-          }
-        }
-      }
-    } catch (error) {
-      this.logger.error('数据库备份失败', error);
-    }
+    // 保留最近30天的备份
+    this.cleanupOldBackups(30);
   }
 
   /**
@@ -87,42 +56,17 @@ export class TaskService {
    */
   @Cron('0 0 * * * *')
   async handleHourlyVisitStats() {
-    this.logger.log('执行每小时访问统计');
-    try {
-      const now = new Date();
-      const hourRange = getHourRange(now);
+    this.logger.log('收集小时访问统计...');
+    const now = new Date();
+    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
-      const count = await this.visitLogRepository.count({
-        where: {
-          createdAt: hourRange,
-        },
-      });
+    const visits = await this.visitLogRepository.count({
+      where: {
+        createdAt: Between(hourAgo, now),
+      },
+    });
 
-      const hourStart = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        now.getHours(),
-        0,
-        0,
-      );
-      const hourEnd = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        now.getHours(),
-        59,
-        59,
-      );
-
-      this.logger.log(
-        `${hourStart.toLocaleString()} 至 ${hourEnd.toLocaleString()} 访问量：${count}`,
-      );
-
-      // 这里可以将统计数据保存到数据库或其他存储
-    } catch (error) {
-      this.logger.error('访问统计失败', error);
-    }
+    this.logger.log(`过去一小时的访问量: ${visits}`);
   }
 
   /**
@@ -130,52 +74,63 @@ export class TaskService {
    */
   @Cron('0 0 2 * * *')
   async handleDataCleanup() {
-    this.logger.log('执行数据清理');
-    try {
-      // 删除30天前的访问日志
-      const beforeCondition = getBeforeDays(30);
+    this.logger.log('清理过期访问日志...');
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const result = await this.visitLogRepository.delete({
-        createdAt: beforeCondition,
-      });
+    const result = await this.visitLogRepository.delete({
+      createdAt: LessThan(thirtyDaysAgo),
+    });
 
-      this.logger.log(`已清理 ${result.affected} 条过期访问日志`);
-    } catch (error) {
-      this.logger.error('数据清理失败', error);
-    }
+    this.logger.log(`已清理 ${result.affected || 0} 条过期访问日志`);
   }
 
   /**
    * 手动触发备份
    */
   async manualBackup(): Promise<string> {
-    this.logger.log('手动触发数据库备份');
+    const filename = `manual_backup_${moment().format('YYYY-MM-DD_HH-mm-ss')}.sql`;
+    await this.performBackup(filename);
+    return path.join(this.backupDir, filename);
+  }
+
+  /**
+   * 执行实际的备份操作
+   */
+  private async performBackup(filename: string): Promise<void> {
+    const dbConfig = config.default().database;
+    const backupPath = path.join(this.backupDir, filename);
+
     try {
-      const backupDir = path.join(process.cwd(), 'backups');
-      if (!fs.existsSync(backupDir)) {
-        fs.mkdirSync(backupDir, { recursive: true });
-      }
-
-      const timestamp = moment().format('YYYY-MM-DD_HH-mm-ss');
-      const backupFileName = `manual_backup_${timestamp}.sql`;
-      const backupFilePath = path.join(backupDir, backupFileName);
-
-      // 使用环境变量获取数据库连接信息
-      const dbHost = process.env.DB_HOST || 'localhost';
-      const dbPort = process.env.DB_PORT || '3306';
-      const dbUser = process.env.DB_USERNAME || 'root';
-      const dbPassword = process.env.DB_PASSWORD || 'root';
-      const dbName = process.env.DB_DATABASE || 'blog';
-
-      // 执行备份命令
-      const command = `mysqldump -h ${dbHost} -P ${dbPort} -u ${dbUser} -p${dbPassword} ${dbName} > ${backupFilePath}`;
+      const command = `mysqldump -h ${dbConfig.host} -P ${dbConfig.port} -u ${dbConfig.username} -p${dbConfig.password} ${dbConfig.database} > ${backupPath}`;
       await execAsync(command);
-
-      this.logger.log(`手动数据库备份成功：${backupFilePath}`);
-      return backupFilePath;
+      this.logger.log(`数据库备份成功: ${backupPath}`);
     } catch (error) {
-      this.logger.error('手动数据库备份失败', error);
+      this.logger.error(`数据库备份失败: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * 清理旧备份
+   */
+  private cleanupOldBackups(days: number): void {
+    try {
+      const files = fs.readdirSync(this.backupDir);
+      const now = moment();
+
+      files.forEach((file) => {
+        const filePath = path.join(this.backupDir, file);
+        const stats = fs.statSync(filePath);
+        const fileDate = moment(stats.mtime);
+
+        if (now.diff(fileDate, 'days') > days) {
+          fs.unlinkSync(filePath);
+          this.logger.log(`已删除旧备份: ${file}`);
+        }
+      });
+    } catch (error) {
+      this.logger.error(`清理旧备份失败: ${error.message}`);
     }
   }
 
@@ -183,53 +138,283 @@ export class TaskService {
    * 获取统计摘要
    */
   async getStatsSummary(): Promise<any> {
-    try {
-      // 文章总数
-      const articleCount = await this.articleRepository.count({
-        where: { isDelete: 0 },
-      });
+    const articleCount = await this.articleRepository.count({
+      where: { isDelete: 0 },
+    });
 
-      // 今日访问量
-      const todayRange = getTodayRange();
-      const todayVisits = await this.visitLogRepository.count({
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayVisits = await this.visitLogRepository.count({
+      where: {
+        createdAt: Between(today, new Date()),
+      },
+    });
+
+    const totalVisits = await this.visitLogRepository.count();
+
+    // 获取过去7天的访问趋势
+    const weeklyTrend = await this.getWeeklyVisitTrend();
+
+    return {
+      articleCount,
+      todayVisits,
+      totalVisits,
+      weeklyTrend,
+    };
+  }
+
+  /**
+   * 获取过去7天的访问趋势
+   */
+  private async getWeeklyVisitTrend(): Promise<any[]> {
+    const result = [];
+    const today = moment().startOf('day');
+
+    for (let i = 6; i >= 0; i--) {
+      const date = moment(today).subtract(i, 'days');
+      const nextDate = moment(date).add(1, 'days');
+
+      const count = await this.visitLogRepository.count({
         where: {
-          createdAt: todayRange,
+          createdAt: Between(date.toDate(), nextDate.toDate()),
         },
       });
 
-      // 总访问量
-      const totalVisits = await this.visitLogRepository.count();
+      result.push({
+        date: date.format('YYYY-MM-DD'),
+        count,
+      });
+    }
 
-      // 7天内访问趋势
-      const weeklyVisits = [];
-      const recentDays = getRecentDays(7);
+    return result;
+  }
 
-      for (let i = 0; i < recentDays.length; i++) {
-        const date = recentDays[i];
-        const nextDate = new Date(date);
-        nextDate.setDate(date.getDate() + 1);
+  /**
+   * 获取备份文件列表
+   */
+  async getBackupList(): Promise<any[]> {
+    try {
+      const files = fs.readdirSync(this.backupDir);
 
-        const count = await this.visitLogRepository.count({
-          where: {
-            createdAt: Between(date, nextDate),
-          },
-        });
+      return files
+        .map((file) => {
+          const filePath = path.join(this.backupDir, file);
+          const stats = fs.statSync(filePath);
 
-        weeklyVisits.push({
-          date: formatDate(date),
-          count,
-        });
+          return {
+            filename: file,
+            size: stats.size,
+            createdAt: stats.mtime,
+            path: filePath,
+          };
+        })
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // 按时间倒序
+    } catch (error) {
+      this.logger.error(`获取备份列表失败: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * 删除指定备份文件
+   */
+  async deleteBackup(filename: string): Promise<boolean> {
+    try {
+      const filePath = path.join(this.backupDir, filename);
+
+      // 安全检查 - 确保文件在备份目录内
+      if (!filePath.startsWith(this.backupDir) || !fs.existsSync(filePath)) {
+        return false;
       }
 
-      return {
-        articleCount,
-        todayVisits,
-        totalVisits,
-        weeklyVisits,
-      };
+      fs.unlinkSync(filePath);
+      this.logger.log(`已删除备份文件: ${filename}`);
+      return true;
     } catch (error) {
-      this.logger.error('获取统计摘要失败', error);
-      throw error;
+      this.logger.error(`删除备份文件失败: ${error.message}`);
+      return false;
     }
+  }
+
+  /**
+   * 获取访问统计数据
+   */
+  async getVisitStats(period: string = 'week'): Promise<any> {
+    let startDate: Date;
+    const endDate = new Date();
+    const today = moment().startOf('day');
+
+    switch (period) {
+      case 'day':
+        startDate = today.toDate();
+        break;
+      case 'month':
+        startDate = moment().subtract(30, 'days').startOf('day').toDate();
+        break;
+      case 'week':
+      default:
+        startDate = moment().subtract(7, 'days').startOf('day').toDate();
+        break;
+    }
+
+    // 获取时间段内的每日访问量
+    const dailyStats = await this.getDailyVisitStats(startDate, endDate);
+
+    // 获取访问量最高的IP来源
+    const topIPs = await this.getTopIPs(startDate, endDate);
+
+    // 获取访问量最高的页面
+    const topPages = await this.getTopPages(startDate, endDate);
+
+    return {
+      period,
+      dailyStats,
+      topIPs,
+      topPages,
+    };
+  }
+
+  /**
+   * 获取每日访问统计
+   */
+  private async getDailyVisitStats(startDate: Date, endDate: Date): Promise<any[]> {
+    const result = [];
+    let current = moment(startDate).startOf('day');
+    const end = moment(endDate).startOf('day');
+
+    while (current.isSameOrBefore(end)) {
+      const nextDay = moment(current).add(1, 'days');
+
+      const count = await this.visitLogRepository.count({
+        where: {
+          createdAt: Between(current.toDate(), nextDay.toDate()),
+        },
+      });
+
+      result.push({
+        date: current.format('YYYY-MM-DD'),
+        count,
+      });
+
+      current = nextDay;
+    }
+
+    return result;
+  }
+
+  /**
+   * 获取访问量最高的IP
+   */
+  private async getTopIPs(startDate: Date, endDate: Date, limit: number = 10): Promise<any[]> {
+    const result = await this.visitLogRepository
+      .createQueryBuilder('visitLog')
+      .select('visitLog.ip')
+      .addSelect('COUNT(*)', 'count')
+      .where('visitLog.createdAt BETWEEN :startDate AND :endDate', { startDate, endDate })
+      .groupBy('visitLog.ip')
+      .orderBy('count', 'DESC')
+      .limit(limit)
+      .getRawMany();
+
+    return result;
+  }
+
+  /**
+   * 获取访问量最高的页面
+   */
+  private async getTopPages(startDate: Date, endDate: Date, limit: number = 10): Promise<any[]> {
+    const result = await this.visitLogRepository
+      .createQueryBuilder('visitLog')
+      .select('visitLog.pageUrl')
+      .addSelect('COUNT(*)', 'count')
+      .where('visitLog.createdAt BETWEEN :startDate AND :endDate', { startDate, endDate })
+      .groupBy('visitLog.pageUrl')
+      .orderBy('count', 'DESC')
+      .limit(limit)
+      .getRawMany();
+
+    return result;
+  }
+
+  /**
+   * 获取内容统计数据
+   */
+  async getContentStats(): Promise<any> {
+    // 文章数量统计
+    const totalArticles = await this.articleRepository.count({
+      where: { isDelete: 0 },
+    });
+
+    const publishedArticles = await this.articleRepository.count({
+      where: { isDelete: 0, status: 1 },
+    });
+
+    const draftArticles = await this.articleRepository.count({
+      where: { isDelete: 0, status: 0 },
+    });
+
+    // 分类统计
+    const categoryStats = await this.articleRepository.query(`
+      SELECT c.name, COUNT(a.id) as count
+      FROM category c
+      LEFT JOIN article a ON a.categoryId = c.id AND a.isDelete = 0
+      GROUP BY c.id
+      ORDER BY count DESC
+    `);
+
+    // 标签统计
+    const tagStats = await this.articleRepository.query(`
+      SELECT t.name, COUNT(DISTINCT at.articleId) as count
+      FROM tag t
+      LEFT JOIN article_tag at ON at.tagId = t.id
+      LEFT JOIN article a ON at.articleId = a.id AND a.isDelete = 0
+      GROUP BY t.id
+      ORDER BY count DESC
+      LIMIT 10
+    `);
+
+    // 按月份统计文章数量
+    const monthlyArticles = await this.getMonthlyArticleStats();
+
+    return {
+      articles: {
+        total: totalArticles,
+        published: publishedArticles,
+        draft: draftArticles,
+      },
+      categories: categoryStats,
+      tags: tagStats,
+      monthlyArticles,
+    };
+  }
+
+  /**
+   * 获取按月统计的文章数量
+   */
+  private async getMonthlyArticleStats(): Promise<any[]> {
+    // 获取最近12个月的数据
+    const result = [];
+    const today = moment().startOf('month');
+
+    for (let i = 11; i >= 0; i--) {
+      const month = moment(today).subtract(i, 'months');
+      const startDate = month.clone().startOf('month').toDate();
+      const endDate = month.clone().endOf('month').toDate();
+
+      const count = await this.articleRepository.count({
+        where: {
+          createdAt: Between(startDate, endDate),
+          isDelete: 0,
+        },
+      });
+
+      result.push({
+        month: month.format('YYYY-MM'),
+        count,
+      });
+    }
+
+    return result;
   }
 }

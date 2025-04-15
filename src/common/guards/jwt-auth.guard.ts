@@ -36,9 +36,12 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
     // 检查是否是公开路径
     const request = context.switchToHttp().getRequest();
-    const { path, method } = request;
+    const { url, method } = request;
 
-    if (method === 'GET') {
+    if (method === 'GET' && url) {
+      // 移除查询参数
+      const path = url.split('?')[0];
+
       for (const publicPath of this.publicPaths) {
         if (path.startsWith(publicPath)) {
           return true;

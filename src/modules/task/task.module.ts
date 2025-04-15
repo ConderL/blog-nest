@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
-import { TaskService } from './task.service';
-import { TaskController } from './task.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Article } from '../blog/entities/article.entity';
-import { VisitLog } from '../blog/entities/visit-log.entity';
+import { VisitLog } from '../log/entities/visit-log.entity';
+import { TaskService } from './task.service';
+import { TaskController } from './task.controller';
+import { UserModule } from '../user/user.module';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), TypeOrmModule.forFeature([Article, VisitLog])],
+  imports: [ScheduleModule.forRoot(), TypeOrmModule.forFeature([Article, VisitLog]), UserModule],
   controllers: [TaskController],
   providers: [TaskService],
   exports: [TaskService],

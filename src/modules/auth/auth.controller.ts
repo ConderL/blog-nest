@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from '../user/dto/login.dto';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -12,6 +12,7 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: '用户登录' })
   @Public()
+  @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
   }
