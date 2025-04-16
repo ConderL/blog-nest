@@ -114,280 +114,395 @@ npm run migration:revert
 - `site_config` - 站点配置表
 - `visit_logs` - 访问日志表
 
-## 服务器部署
+## 生产环境部署
 
-### 环境准备
+本项目提供多种部署方式，包括传统服务器部署、Docker容器部署和云服务部署。选择符合您需求的方式进行部署。
 
-1. **安装Node.js（推荐v16+）**
-   ```bash
-   # 使用nvm安装Node.js
-   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
-   source ~/.bashrc
-   nvm install 16
-   nvm use 16
-   ```
+### 阿里云 CentOS 7.6 部署指南
 
-2. **安装MySQL**
-   ```bash
-   # Ubuntu/Debian
-   sudo apt update
-   sudo apt install mysql-server
-   
-   # CentOS/RHEL
-   sudo yum install mysql-server
-   sudo systemctl start mysqld
-   sudo systemctl enable mysqld
-   
-   # 配置MySQL
-   sudo mysql_secure_installation
-   ```
+#### 1. 服务器初始化配置
 
-3. **安装PNPM**
-   ```bash
-   npm install -g pnpm
-   ```
-
-### 后端部署（blog-nest）
-
-1. **克隆代码并进入目录**
-   ```bash
-   git clone <repository-url>
-   cd blog/blog-nest
-   ```
-
-2. **安装依赖**
-   ```bash
-   pnpm install
-   ```
-
-3. **配置环境变量**
-   ```bash
-   # 创建.env文件
-   cp .env.example .env
-   
-   # 编辑配置
-   nano .env
-   ```
-   
-   基本配置内容：
-   ```
-   NODE_ENV=production
-   PORT=3000
-   
-   # 数据库配置
-   DB_HOST=localhost
-   DB_PORT=3306
-   DB_USERNAME=root
-   DB_PASSWORD=your_password
-   DB_DATABASE=blog
-   
-   # JWT配置
-   JWT_SECRET=your_secret_key
-   JWT_EXPIRES_IN=24h
-   ```
-
-4. **编译项目**
-   ```bash
-   pnpm build
-   ```
-
-5. **运行数据库初始化脚本**
-   ```bash
-   mysql -u root -p blog < fix-db.sql
-   ```
-
-6. **使用PM2运行项目**
-   ```bash
-   # 安装PM2
-   npm install -g pm2
-   
-   # 启动服务
-   pm2 start dist/main.js --name blog-nest
-   
-   # 设置开机自启
-   pm2 startup
-   pm2 save
-   ```
-
-### 前端部署（blog-vue）
-
-1. **进入前端目录**
-   ```bash
-   cd ../blog-vue
-   ```
-
-2. **安装依赖**
-   ```bash
-   # 博客前台
-   cd conder-blog
-   pnpm install
-   
-   # 管理后台
-   cd ../conder-admin
-   pnpm install
-   ```
-
-3. **配置API地址**
-   
-   修改前台配置文件（`.env.production`）：
-   ```
-   VITE_APP_BASE_API=/api
-   ```
-   
-   修改后台配置文件（`.env.production`）：
-   ```
-   VITE_APP_BASE_API=/admin-api
-   ```
-
-4. **构建前端项目**
-   ```bash
-   # 博客前台
-   cd ../conder-blog
-   pnpm build
-   
-   # 管理后台
-   cd ../conder-admin
-   pnpm build
-   ```
-
-5. **使用Nginx部署**
-   
-   安装Nginx：
-   ```bash
-   sudo apt install nginx
-   ```
-   
-   配置Nginx：
-   ```bash
-   sudo nano /etc/nginx/sites-available/blog
-   ```
-   
-   配置内容：
-   ```nginx
-   server {
-       listen 80;
-       server_name yourdomain.com;
-       
-       # 博客前台
-       location / {
-           root /path/to/blog/blog-vue/conder-blog/dist;
-           try_files $uri $uri/ /index.html;
-           index index.html;
-       }
-       
-       # 管理后台
-       location /admin {
-           alias /path/to/blog/blog-vue/conder-admin/dist;
-           try_files $uri $uri/ /admin/index.html;
-           index index.html;
-       }
-       
-       # API代理 - 博客前台
-       location /api/ {
-           proxy_pass http://localhost:3000/;
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-       }
-       
-       # API代理 - 管理后台
-       location /admin-api/ {
-           proxy_pass http://localhost:3000/;
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-       }
-   }
-   ```
-   
-   启用配置并重启Nginx：
-   ```bash
-   sudo ln -s /etc/nginx/sites-available/blog /etc/nginx/sites-enabled/
-   sudo nginx -t
-   sudo systemctl restart nginx
-   ```
-
-6. **配置HTTPS（可选）**
-   ```bash
-   # 安装Certbot
-   sudo apt install certbot python3-certbot-nginx
-   
-   # 获取并配置SSL证书
-   sudo certbot --nginx -d yourdomain.com
-   ```
-
-## 常见问题排查
-
-### 管理员登录问题
-
-如果出现"您没有管理员权限"的提示，请确保：
-
-1. 已执行管理员角色设置的SQL脚本
-2. 确认用户已被分配管理员角色
-3. 临时解决方案：修改`blog-nest/src/modules/auth/auth.service.ts`文件，注释掉`adminLogin`方法中的角色检查代码
-
-### 数据库连接问题
-
-1. 检查MySQL服务是否运行：`sudo systemctl status mysql`
-2. 确认数据库用户名和密码正确
-3. 检查数据库连接权限：`GRANT ALL PRIVILEGES ON blog.* TO 'user'@'localhost';`
-
-### 服务启动失败
-
-1. 检查日志：`pm2 logs blog-nest`
-2. 确保端口未被占用：`netstat -tulpn | grep 3000`
-3. 检查环境变量配置是否正确
-
-### 前端访问问题
-
-1. 确认Nginx配置是否正确：`nginx -t`
-2. 检查Nginx错误日志：`tail -f /var/log/nginx/error.log`
-3. 确保API代理配置正确指向后端服务
-
-## 系统维护
-
-### 备份数据库
+首先需要对新创建的CentOS 7.6服务器进行基本配置：
 
 ```bash
-# 创建备份
-mysqldump -u root -p blog > blog_backup_$(date +%Y%m%d).sql
+# 更新系统包
+sudo yum update -y
 
-# 定期备份（Cron任务）
-echo "0 2 * * * mysqldump -u root -p'password' blog > /path/to/backups/blog_backup_\$(date +\%Y\%m\%d).sql" | crontab -
+# 安装常用工具
+sudo yum install -y wget curl vim git unzip net-tools
+
+# 配置防火墙，开放必要端口
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --permanent --add-port=3300/tcp  # NestJS应用端口
+sudo firewall-cmd --reload
+
+# 检查防火墙状态
+sudo firewall-cmd --list-all
 ```
 
-### 更新系统
+#### 2. 安装Node.js环境
+
+CentOS 7.6上安装Node.js v16：
 
 ```bash
-# 拉取最新代码
-git pull
+# 添加NodeSource源
+curl -fsSL https://rpm.nodesource.com/setup_16.x | sudo bash -
 
-# 更新依赖
+# 安装Node.js
+sudo yum install -y nodejs
+
+# 确认安装版本
+node -v  # 应显示v16.x.x
+npm -v   # 确认npm已安装
+
+# 安装pnpm
+sudo npm install -g pnpm
+
+# 确认pnpm安装成功
+pnpm -v
+```
+
+#### 3. 安装MySQL 8
+
+CentOS 7.6上安装MySQL数据库：
+
+```bash
+# 添加MySQL源
+sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2022
+
+# 安装MySQL服务器
+sudo yum install -y mysql-community-server
+
+# 启动MySQL服务
+sudo systemctl start mysqld
+sudo systemctl enable mysqld
+
+# 检查MySQL状态
+sudo systemctl status mysqld
+
+# 获取MySQL临时密码
+sudo grep 'temporary password' /var/log/mysqld.log
+
+# 执行MySQL安全配置向导
+sudo mysql_secure_installation
+# 按提示操作：
+# 1. 输入临时密码
+# 2. 设置新密码
+# 3. 移除匿名用户
+# 4. 禁止root远程登录
+# 5. 移除测试数据库
+# 6. 重新加载权限表
+```
+
+为博客创建专用数据库和用户：
+
+```bash
+# 登录MySQL
+mysql -u root -p
+
+# 创建数据库和用户
+mysql> CREATE DATABASE blog CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+mysql> CREATE USER 'bloguser'@'localhost' IDENTIFIED BY 'your_secure_password';
+mysql> GRANT ALL PRIVILEGES ON blog.* TO 'bloguser'@'localhost';
+mysql> FLUSH PRIVILEGES;
+mysql> EXIT;
+```
+
+#### 4. 安装Redis (用于消息队列)
+
+```bash
+# 安装EPEL源
+sudo yum install -y epel-release
+
+# 安装Redis
+sudo yum install -y redis
+
+# 启动Redis并设置开机自启
+sudo systemctl start redis
+sudo systemctl enable redis
+
+# 检查Redis状态
+sudo systemctl status redis
+```
+
+#### 5. 部署后端应用 (blog-nest)
+
+```bash
+# 创建应用目录
+sudo mkdir -p /var/www/blog
+sudo chown -R $USER:$USER /var/www/blog
+
+# 安装Git
+sudo yum install git -y
+
+# 克隆代码仓库
+cd /var/www/blog
+git clone <repository-url> .
+cd blog-nest
+
+# 安装依赖
 pnpm install
 
-# 重新构建
+# 配置环境变量
+cp .env.example .env
+vim .env
+
+# 编辑.env文件，配置关键信息
+# PORT=3300
+# NODE_ENV=production
+# DB_HOST=localhost
+# DB_PORT=3306
+# DB_USERNAME=bloguser
+# DB_PASSWORD=your_secure_password
+# DB_DATABASE=blog
+# JWT_SECRET=your_strong_random_jwt_secret
+# REDIS_HOST=localhost
+# REDIS_PORT=6379
+
+# 编译项目
 pnpm build
 
-# 重启服务
-pm2 restart blog-nest
+# 初始化数据库
+pnpm db:init
+
+# 安装PM2进程管理器
+sudo npm install -g pm2
+
+# 使用PM2启动应用
+pm2 start dist/main.js --name blog-nest
+
+# 设置PM2开机自启
+pm2 startup
+sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $USER --hp $HOME
+pm2 save
 ```
 
-### 日志管理
+#### 6. 部署前端应用 (blog-vue)
+
+```bash
+# 进入前端目录
+cd /var/www/blog/blog-vue
+
+# 配置前台应用
+cd conder-blog
+pnpm install
+
+# 修改环境变量配置
+vim .env.production
+# 设置API地址，例如：VITE_APP_BASE_API=http://your_server_ip:3300/api
+
+# 构建前台应用
+pnpm build
+
+# 配置管理后台
+cd ../conder-admin
+pnpm install
+
+# 修改环境变量配置
+vim .env.production
+# 设置API地址，例如：VITE_APP_BASE_API=http://your_server_ip:3300/admin-api
+
+# 构建管理后台
+pnpm build
+```
+
+#### 7. 安装并配置Nginx
+
+```bash
+# 安装Nginx源
+sudo yum install -y epel-release
+
+# 安装Nginx
+sudo yum install -y nginx
+
+# 启动Nginx并设置开机自启
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+# 创建博客站点配置
+sudo vim /etc/nginx/conf.d/blog.conf
+```
+
+在`blog.conf`文件中添加以下配置：
+
+```nginx
+server {
+    listen 80;
+    server_name your_domain.com;  # 替换为您的域名或服务器IP
+    
+    # 博客前台
+    location / {
+        root /var/www/blog/blog-vue/conder-blog/dist;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+    
+    # 管理后台
+    location /admin {
+        alias /var/www/blog/blog-vue/conder-admin/dist;
+        index index.html;
+        try_files $uri $uri/ /admin/index.html;
+    }
+    
+    # API反向代理 - 前台
+    location /api/ {
+        proxy_pass http://localhost:3300/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_cache_bypass $http_upgrade;
+    }
+    
+    # API反向代理 - 后台
+    location /admin-api/ {
+        proxy_pass http://localhost:3300/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+```bash
+# 检查Nginx配置
+sudo nginx -t
+
+# 如果配置正确，重新加载Nginx
+sudo systemctl reload nginx
+```
+
+#### 8. 配置HTTPS（可选）
+
+如果您有域名并想启用HTTPS，可以使用Let's Encrypt的Certbot：
+
+```bash
+# 安装Certbot
+sudo yum install -y certbot python2-certbot-nginx
+
+# 获取并安装SSL证书
+sudo certbot --nginx -d your_domain.com
+
+# 证书自动续期设置
+sudo certbot renew --dry-run
+```
+
+#### 9. 上传文件目录配置
+
+创建上传文件的目录并设置权限：
+
+```bash
+# 创建上传目录
+sudo mkdir -p /var/www/blog/public/uploads
+sudo chown -R nginx:nginx /var/www/blog/public
+
+# 在Nginx配置中添加上传文件的访问路径
+sudo vim /etc/nginx/conf.d/blog.conf
+```
+
+在Nginx配置中添加：
+
+```nginx
+# 上传文件访问
+location /uploads/ {
+    alias /var/www/blog/public/uploads/;
+}
+```
+
+```bash
+# 重新加载Nginx配置
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+#### 10. 系统监控和日志管理
 
 ```bash
 # 查看应用日志
 pm2 logs blog-nest
 
-# 日志轮转
+# 查看Nginx访问日志
+sudo tail -f /var/log/nginx/access.log
+
+# 查看Nginx错误日志
+sudo tail -f /var/log/nginx/error.log
+
+# 设置PM2日志轮转
 pm2 install pm2-logrotate
 ```
 
-## 技术支持
+#### 11. 系统维护
 
-如有任何问题，请提交Issue或联系项目维护者。
+定期更新和备份：
 
-## 许可证
+```bash
+# 备份数据库
+mysqldump -u root -p blog > /var/backups/blog_$(date +%Y%m%d).sql
 
-项目使用MIT许可证，详情请查看LICENSE文件。
+# 定期更新系统
+sudo yum update -y
+
+# 重启服务
+sudo systemctl restart mysqld
+sudo systemctl restart nginx
+pm2 restart blog-nest
+```
+
+#### 12. 故障排查
+
+如果遇到问题，检查以下几点：
+
+1. **检查服务状态**：
+   ```bash
+   sudo systemctl status mysqld
+   sudo systemctl status nginx
+   sudo systemctl status redis
+   pm2 status
+   ```
+
+2. **检查防火墙**：
+   ```bash
+   sudo firewall-cmd --list-all
+   ```
+
+3. **检查日志**：
+   ```bash
+   pm2 logs blog-nest
+   sudo tail -f /var/log/nginx/error.log
+   sudo journalctl -u mysqld
+   ```
+
+4. **检查SELinux**：
+   ```bash
+   # 如果遇到权限问题，可能需要调整SELinux
+   sudo sestatus
+   
+   # 临时禁用SELinux
+   sudo setenforce 0
+   
+   # 永久禁用SELinux（需重启）
+   sudo sed -i 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+   ```
+
+5. **网络连接测试**：
+   ```bash
+   # 检查端口是否开放
+   sudo netstat -tulpn | grep LISTEN
+   
+   # 测试数据库连接
+   mysql -u bloguser -p -h localhost blog
+   ```
+
+6. **内存和磁盘空间检查**：
+   ```bash
+   free -h
+   df -h
+   ```
+

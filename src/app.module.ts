@@ -7,6 +7,11 @@ import { RequestInterceptor } from './common/interceptors/request.interceptor';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { BlogModule } from './modules/blog/blog.module';
+import { QueueModule } from './modules/queue/queue.module';
+import { OauthModule } from './modules/oauth/oauth.module';
+import { SearchModule } from './modules/search/search.module';
+import { UploadModule } from './modules/upload/upload.module';
+import { EmailModule } from './modules/email/email.module';
 
 import configuration from './config/configuration';
 
@@ -34,6 +39,11 @@ import configuration from './config/configuration';
       }),
     }),
     // 业务模块
+    EmailModule,
+    UploadModule,
+    OauthModule,
+    SearchModule,
+    QueueModule,
     AuthModule,
     UserModule,
     BlogModule,
