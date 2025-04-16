@@ -51,3 +51,4 @@ nginx/error.log
 nginx/access.log
 
 db_data/mysql.sock
+pnpm-lock.yaml

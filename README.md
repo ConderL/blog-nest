@@ -118,18 +118,18 @@ npm run migration:revert
 
 本项目提供多种部署方式，包括传统服务器部署、Docker容器部署和云服务部署。选择符合您需求的方式进行部署。
 
-### 阿里云 CentOS 7.6 部署指南
+### 阿里云 CentOS 8.2 部署指南
 
 #### 1. 服务器初始化配置
 
-首先需要对新创建的CentOS 7.6服务器进行基本配置：
+首先需要对新创建的CentOS 8.2服务器进行基本配置：
 
 ```bash
 # 更新系统包
-sudo yum update -y
+sudo dnf update -y
 
 # 安装常用工具
-sudo yum install -y wget curl vim git unzip net-tools
+sudo dnf install -y wget curl vim git unzip net-tools
 
 # 配置防火墙，开放必要端口
 sudo firewall-cmd --permanent --add-service=http
@@ -143,17 +143,17 @@ sudo firewall-cmd --list-all
 
 #### 2. 安装Node.js环境
 
-CentOS 7.6上安装Node.js v16：
+CentOS 8.2上安装Node.js v20：
 
 ```bash
 # 添加NodeSource源
-curl -fsSL https://rpm.nodesource.com/setup_16.x | sudo bash -
+curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
 
 # 安装Node.js
-sudo yum install -y nodejs
+sudo dnf install -y nodejs
 
 # 确认安装版本
-node -v  # 应显示v16.x.x
+node -v  # 应显示v20.x.x
 npm -v   # 确认npm已安装
 
 # 安装pnpm
@@ -165,14 +165,18 @@ pnpm -v
 
 #### 3. 安装MySQL 8
 
-CentOS 7.6上安装MySQL数据库：
+CentOS 8.2上安装MySQL数据库：
 
 ```bash
 # 添加MySQL源
-sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2022
+sudo dnf install -y https://dev.mysql.com/get/mysql80-community-release-el8-1.noarch.rpm
+
+# 启用MySQL 8.0仓库
+sudo dnf module disable mysql -y
+sudo dnf config-manager --enable mysql80-community
 
 # 安装MySQL服务器
-sudo yum install -y mysql-community-server
+sudo dnf install -y mysql-community-server
 
 # 启动MySQL服务
 sudo systemctl start mysqld
@@ -212,11 +216,11 @@ mysql> EXIT;
 #### 4. 安装Redis (用于消息队列)
 
 ```bash
-# 安装EPEL源
-sudo yum install -y epel-release
+# 启用Redis模块
+sudo dnf module enable redis:6 -y
 
 # 安装Redis
-sudo yum install -y redis
+sudo dnf install -y redis
 
 # 启动Redis并设置开机自启
 sudo systemctl start redis
@@ -234,7 +238,7 @@ sudo mkdir -p /var/www/blog
 sudo chown -R $USER:$USER /var/www/blog
 
 # 安装Git
-sudo yum install git -y
+sudo dnf install git -y
 
 # 克隆代码仓库
 cd /var/www/blog
@@ -270,7 +274,7 @@ pnpm db:init
 sudo npm install -g pm2
 
 # 使用PM2启动应用
-pm2 start dist/main.js --name blog-nest
+pm2 start dist/src/main.js --name blog-nest
 
 # 设置PM2开机自启
 pm2 startup
@@ -310,11 +314,8 @@ pnpm build
 #### 7. 安装并配置Nginx
 
 ```bash
-# 安装Nginx源
-sudo yum install -y epel-release
-
 # 安装Nginx
-sudo yum install -y nginx
+sudo dnf install -y nginx
 
 # 启动Nginx并设置开机自启
 sudo systemctl start nginx
@@ -384,8 +385,11 @@ sudo systemctl reload nginx
 如果您有域名并想启用HTTPS，可以使用Let's Encrypt的Certbot：
 
 ```bash
-# 安装Certbot
-sudo yum install -y certbot python2-certbot-nginx
+# 安装EPEL仓库
+sudo dnf install -y epel-release
+
+# 安装Certbot和Nginx插件
+sudo dnf install -y certbot python3-certbot-nginx
 
 # 获取并安装SSL证书
 sudo certbot --nginx -d your_domain.com
@@ -447,7 +451,7 @@ pm2 install pm2-logrotate
 mysqldump -u root -p blog > /var/backups/blog_$(date +%Y%m%d).sql
 
 # 定期更新系统
-sudo yum update -y
+sudo dnf update -y
 
 # 重启服务
 sudo systemctl restart mysqld
@@ -467,19 +471,47 @@ pm2 restart blog-nest
    pm2 status
    ```
 
-2. **检查防火墙**：
+2. **检查依赖模块问题**：
+   
+   如果遇到 "Cannot find module 'xxx'" 类型的错误，通常是因为依赖没有正确安装。解决方法：
+   
+   ```bash
+   # 确保在项目根目录
+   cd /var/www/blog/blog-nest
+   
+   # 清除npm缓存
+   npm cache clean --force
+   
+   # 重新安装依赖
+   npm install
+   # 或使用pnpm
+   pnpm install
+   
+   # 针对特定模块问题（如bull队列模块）
+   npm install bull @nestjs/bull --save
+   
+   # 重新构建项目
+   npm run build
+   
+   # 重启应用
+   pm2 restart blog-nest
+   ```
+   
+   特别注意：如果使用pnpm安装后仍然报模块找不到错误，可以尝试使用npm安装，因为有时pnpm的符号链接可能在某些环境中无法正确解析。
+
+3. **检查防火墙**：
    ```bash
    sudo firewall-cmd --list-all
    ```
 
-3. **检查日志**：
+4. **检查日志**：
    ```bash
    pm2 logs blog-nest
    sudo tail -f /var/log/nginx/error.log
    sudo journalctl -u mysqld
    ```
 
-4. **检查SELinux**：
+5. **检查SELinux**：
    ```bash
    # 如果遇到权限问题，可能需要调整SELinux
    sudo sestatus
@@ -491,16 +523,16 @@ pm2 restart blog-nest
    sudo sed -i 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
    ```
 
-5. **网络连接测试**：
+6. **网络连接测试**：
    ```bash
    # 检查端口是否开放
-   sudo netstat -tulpn | grep LISTEN
+   sudo ss -tulpn | grep LISTEN
    
    # 测试数据库连接
    mysql -u bloguser -p -h localhost blog
    ```
 
-6. **内存和磁盘空间检查**：
+7. **内存和磁盘空间检查**：
    ```bash
    free -h
    df -h
