@@ -2,14 +2,13 @@ import {
   Controller,
   Get,
   Post,
-  Put,
+  Patch,
   Delete,
   Body,
   Param,
   Query,
   UseGuards,
   Req,
-  Patch,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -32,7 +31,10 @@ export class ArticleController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @OperationLog(OperationType.CREATE)
-  create(@Body() createArticleDto: CreateArticleDto, @Body('tagIds') tagIds: number[]) {
+  async create(
+    @Body() createArticleDto: CreateArticleDto,
+    @Body('tagIds') tagIds: number[],
+  ): Promise<ResultDto<Article>> {
     const article: Partial<Article> = {
       articleTitle: createArticleDto.title,
       articleContent: createArticleDto.content,
@@ -45,22 +47,32 @@ export class ArticleController {
       status: createArticleDto.isPublish ? 1 : 3, // 1-公开 3-草稿
     };
 
-    return this.articleService.create(article, tagIds);
+    const result = await this.articleService.create(article, tagIds);
+    return ResultDto.success(result);
   }
 
   @ApiOperation({ summary: '查询文章列表' })
   @Get()
   @UseGuards(JwtAuthGuard)
-  findAll(@Query() query: any) {
-    const { page = 1, limit = 10, ...rest } = query;
-    return this.articleService.findAll(+page, +limit, rest);
+  async findAll(@Query() query: any): Promise<ResultDto<{ items: Article[]; total: number }>> {
+    const { page = 1, limit = 10, keyword, categoryId, tagId, status } = query;
+    const result = await this.articleService.findAll(
+      +page,
+      +limit,
+      keyword,
+      categoryId ? +categoryId : undefined,
+      tagId ? +tagId : undefined,
+      status !== undefined ? +status : undefined,
+    );
+    return ResultDto.success(result);
   }
 
   @ApiOperation({ summary: '查询文章详情' })
   @Get(':id')
   @VisitLog('文章详情')
-  findById(@Param('id') id: string) {
-    return this.articleService.findById(+id);
+  async findById(@Param('id') id: string): Promise<ResultDto<Article>> {
+    const result = await this.articleService.findById(+id);
+    return ResultDto.success(result);
   }
 
   @ApiOperation({ summary: '更新文章' })
@@ -68,11 +80,11 @@ export class ArticleController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @OperationLog(OperationType.UPDATE)
-  update(
+  async update(
     @Param('id') id: string,
     @Body() updateArticleDto: UpdateArticleDto,
     @Body('tagIds') tagIds: number[],
-  ) {
+  ): Promise<ResultDto<Article>> {
     const article: Partial<Article> = {
       articleTitle: updateArticleDto.title,
       articleContent: updateArticleDto.content,
@@ -84,15 +96,17 @@ export class ArticleController {
       status: updateArticleDto.isPublish ? 1 : 3, // 1-公开 3-草稿
     };
 
-    return this.articleService.update(+id, article, tagIds);
+    const result = await this.articleService.update(+id, article, tagIds);
+    return ResultDto.success(result);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: '删除文章' })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  async remove(@Param('id') id: number): Promise<ResultDto<null>> {
-    await this.articleService.remove(id);
+  @OperationLog(OperationType.DELETE)
+  async remove(@Param('id') id: string): Promise<ResultDto<null>> {
+    await this.articleService.remove(+id);
     return ResultDto.success(null);
   }
 }

@@ -72,14 +72,35 @@ export class MenuService {
   /**
    * 构建菜单树
    */
-  private buildTree(menus: Menu[]): Menu[] {
+  private buildTree(menus: Menu[]): any[] {
     console.log('MenuService.buildTree - 开始构建菜单树，输入菜单数量:', menus.length);
-    const result: Menu[] = [];
-    const map = {};
+
+    // 打印菜单项，便于调试
+    menus.forEach((menu) => {
+      console.log(
+        `菜单项: ID=${menu.id}, 名称=${menu.name}, 父ID=${menu.parentId}, 类型=${menu.type}`,
+      );
+    });
+
+    const result: any[] = [];
+    const map: Record<number, any> = {};
 
     // 创建一个临时的Map，将所有菜单按ID映射
     menus.forEach((item) => {
-      map[item.id] = { ...item, children: [] };
+      // 创建新对象，避免修改原始实体
+      const menuItem: any = { ...item };
+
+      // 把boolean类型转换为前端所需的数值类型
+      menuItem.hidden = item.hidden ? 1 : 0;
+      menuItem.children = [];
+
+      // 添加前端路由需要的属性
+      if (item.type === 0) {
+        menuItem.redirect = 'noRedirect';
+        menuItem.alwaysShow = true;
+      }
+
+      map[item.id] = menuItem;
     });
 
     // 构建树结构
@@ -91,8 +112,21 @@ export class MenuService {
         // 子菜单，添加到父菜单的children中
         if (map[item.parentId]) {
           map[item.parentId].children.push(map[item.id]);
+        } else {
+          console.log(
+            `警告: 菜单项 ${item.name}(ID=${item.id}) 的父菜单 ID=${item.parentId} 不存在`,
+          );
         }
       }
+    });
+
+    // 打印生成的菜单树结构
+    console.log('MenuService.buildTree - 菜单树结构:');
+    result.forEach((menu) => {
+      console.log(`- ${menu.name} (${menu.children.length}个子菜单)`);
+      menu.children.forEach((child) => {
+        console.log(`  * ${child.name}`);
+      });
     });
 
     console.log('MenuService.buildTree - 构建完成，菜单树根节点数量:', result.length);

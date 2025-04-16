@@ -76,4 +76,9 @@ export class Comment extends BaseEntity {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user: User;
+
+  /**
+   * 子评论列表 - 非数据库字段
+   */
+  children: Comment[];
 }

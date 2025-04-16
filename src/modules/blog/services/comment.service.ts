@@ -38,38 +38,50 @@ export class CommentService {
   }
 
   /**
-   * 获取评论列表
-   * @param page 页码
-   * @param limit 每页数量
-   * @param articleId 文章ID
-   * @returns 评论列表和总数
+   * 查询评论列表
    */
-  async findAll(
-    page: number = 1,
-    limit: number = 10,
-    articleId?: number,
-  ): Promise<{ items: Comment[]; total: number }> {
-    // 构建查询条件
-    const queryBuilder = this.commentRepository.createQueryBuilder('comment');
-
-    // 如果有文章ID，则根据文章ID筛选
-    if (articleId) {
-      queryBuilder.where('comment.articleId = :articleId', { articleId });
-    }
-
-    // 获取总数
-    const total = await queryBuilder.getCount();
-
-    // 获取分页数据
-    const items = await queryBuilder
+  async findAll(page: number, limit: number, articleId?: number): Promise<[Comment[], number]> {
+    const queryBuilder = this.commentRepository
+      .createQueryBuilder('comment')
       .leftJoinAndSelect('comment.user', 'user')
       .leftJoinAndSelect('comment.article', 'article')
+      .where('comment.isDelete = :isDelete', { isDelete: 0 });
+
+    if (articleId) {
+      queryBuilder.andWhere('comment.articleId = :articleId', { articleId });
+    }
+
+    return queryBuilder
       .orderBy('comment.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)
-      .getMany();
+      .getManyAndCount();
+  }
 
-    return { items, total };
+  /**
+   * 获取文章评论列表(含子评论)
+   */
+  async findByArticleId(articleId: number): Promise<Comment[]> {
+    // 查询所有与该文章相关的评论
+    const comments = await this.commentRepository.find({
+      where: {
+        articleId,
+      },
+      relations: ['user'],
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+
+    // 找出所有顶级评论（无父评论的评论）
+    const topComments = comments.filter((comment) => !comment.parentId);
+
+    // 为每个顶级评论构建评论树
+    for (const comment of topComments) {
+      this.findChildren(comment, comments);
+    }
+
+    return topComments;
   }
 
   /**
@@ -110,19 +122,31 @@ export class CommentService {
   }
 
   /**
-   * 查找子评论
+   * 递归查找子评论
+   * @param comment 当前评论
+   * @param allComments 所有评论
    */
-  private async findChildren(comment: Comment): Promise<void> {
-    const children = await this.commentRepository.find({
-      where: { parentId: comment.id },
-      relations: ['fromUser', 'toUser'],
-      order: { createdAt: 'ASC' },
-    });
+  private findChildren(comment: Comment, allComments: Comment[]) {
+    // 初始化子评论数组
+    comment.children = [];
 
-    comment['children'] = children;
-
-    for (const child of children) {
-      await this.findChildren(child);
+    // 查找直接回复当前评论的评论
+    for (const childComment of allComments) {
+      if (childComment.parentId === comment.id) {
+        // 递归查找子评论的子评论
+        this.findChildren(childComment, allComments);
+        // 添加到当前评论的子评论数组
+        comment.children.push(childComment);
+      }
     }
+
+    // 按创建时间排序
+    if (comment.children.length > 0) {
+      comment.children.sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+    }
+
+    return comment;
   }
 }
