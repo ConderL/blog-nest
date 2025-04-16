@@ -144,18 +144,19 @@ export class SearchService {
 
       // 提取结果
       const hits = response.hits.hits;
-      const total = response.hits.total.value || 0;
+      const totalHits = response.hits.total;
+      const total = typeof totalHits === 'number' ? totalHits : (totalHits as any).value || 0;
 
       // 格式化结果
       const items = hits.map((hit) => {
-        const source = hit._source;
+        const source = hit._source as any;
         const highlight = hit.highlight || {};
 
         return {
-          ...source,
+          ...(source as object),
           id: hit._id,
-          articleTitle: highlight.articleTitle ? highlight.articleTitle[0] : source.articleTitle,
-          articleDesc: highlight.articleDesc ? highlight.articleDesc[0] : source.articleDesc,
+          articleTitle: highlight.articleTitle ? highlight.articleTitle[0] : source?.articleTitle,
+          articleDesc: highlight.articleDesc ? highlight.articleDesc[0] : source?.articleDesc,
           highlight: highlight.articleContent ? highlight.articleContent.join('...') : '',
         };
       });
