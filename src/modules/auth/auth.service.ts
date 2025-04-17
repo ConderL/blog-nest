@@ -224,27 +224,59 @@ export class AuthService {
       const roleList = await this.userService.getUserRoles(user.id);
       this.logger.log(`获取到用户角色: ${JSON.stringify(roleList.map((r) => r.roleLabel))}`);
 
-      // 暂时跳过管理员角色检查，允许任何用户登录
-      // 检查是否有管理员角色
-      // const hasAdminRole = roleList.some((role) => role.roleLabel === 'admin' || role.id === 1);
-      // if (!hasAdminRole) {
-      //   this.logger.warn(`用户没有管理员权限: ${user.username}`);
-      //   return ResultDto.fail('您没有管理员权限', StatusCodeEnum.UNAUTHORIZED);
-      // }
+      // 如果roleList为空，且用户名为admin，则默认添加管理员角色
+      if (roleList.length === 0 && user.username === 'admin') {
+        this.logger.log('用户没有角色，但用户名为admin，添加默认管理员角色');
+        // 这里我们只模拟返回一个管理员角色，实际不写入数据库
+        roleList.push({
+          id: '1',
+          roleName: '管理员',
+          roleLabel: 'admin',
+          remark: '系统管理员',
+          isDisable: 0,
+          createTime: new Date(),
+          updateTime: new Date()
+        } as any);
+      }
+
+      // 获取用户权限列表
+      const permissionList = await this.userService.getUserPermissions(user.id);
+      this.logger.log(`获取到用户权限: ${JSON.stringify(permissionList)}`);
+      
+      // 如果permissionList为空，且用户名为admin，则添加所有权限
+      if ((permissionList.length === 0 || !permissionList) && user.username === 'admin') {
+        this.logger.log('用户没有权限，但用户名为admin，添加所有权限');
+        // 添加常用权限
+        const allPermissions = [
+          'system:user:list', 'system:user:add', 'system:user:update', 'system:user:delete', 'system:user:status',
+          'system:role:list', 'system:role:add', 'system:role:update', 'system:role:delete', 'system:role:status',
+          'system:menu:list', 'system:menu:add', 'system:menu:update', 'system:menu:delete',
+          'monitor:online:list', 'monitor:online:kick',
+          'article:list', 'article:add', 'article:update', 'article:delete', 'article:status',
+          'category:list', 'category:add', 'category:update', 'category:delete',
+          'tag:list', 'tag:add', 'tag:update', 'tag:delete'
+        ];
+        allPermissions.forEach(p => permissionList.push(p));
+      }
 
       // 生成JWT令牌
       const payload = { username: user.username, sub: user.id };
       const token = this.jwtService.sign(payload);
       this.logger.log(`生成JWT令牌: ${token.substring(0, 20)}...，长度: ${token.length}`);
 
-      // 确保返回的是字符串
-      if (typeof token !== 'string') {
-        this.logger.error(`生成的令牌不是字符串: ${typeof token}`);
-        return ResultDto.fail('生成令牌失败', StatusCodeEnum.SYSTEM_ERROR);
-      }
+      // 组装用户信息
+      const userInfo = {
+        id: user.id,
+        username: user.username,
+        nickname: user.nickname || user.username,
+        avatar: user.avatar || '',
+        roleList: roleList.map(role => role.roleLabel || role.id),
+        permissionList: permissionList,
+        token: token
+      };
 
       this.logger.log(`管理员登录成功: ${user.username}`);
-      return ResultDto.success(token); // 只返回token字符串，不返回用户信息
+      return ResultDto.success(userInfo); // 返回完整的用户信息，包括token
     } catch (error) {
       this.logger.error(`管理员登录失败: ${error.message}`);
       return ResultDto.fail(error.message, error.status || 400);

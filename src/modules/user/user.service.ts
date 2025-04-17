@@ -56,7 +56,82 @@ export class UserService {
       user.password = await bcrypt.hash(user.password, 10);
     }
     const newUser = this.userRepository.create(user);
-    return this.userRepository.save(newUser);
+    const savedUser = await this.userRepository.save(newUser);
+
+    // 为新用户添加角色
+    await this.addUserRole(savedUser.id);
+
+    return savedUser;
+  }
+
+  /**
+   * 为用户添加角色并分配权限
+   */
+  private async addUserRole(userId: number): Promise<void> {
+    try {
+      // 1. 查找或创建游客角色
+      let visitorRole = await this.roleRepository.findOne({ where: { roleLabel: 'visitor' } });
+
+      if (!visitorRole) {
+        // 创建游客角色
+        const newRole = this.roleRepository.create({
+          roleName: '游客',
+          roleLabel: 'visitor',
+          remark: '游客角色，只能访问博客和消息管理',
+        });
+        visitorRole = await this.roleRepository.save(newRole);
+        console.log('创建了新的游客角色:', visitorRole.id);
+      }
+
+      // 2. 为用户分配游客角色
+      const userRole = new UserRole();
+      userRole.userId = userId;
+      userRole.roleId = visitorRole.id;
+      await this.userRoleRepository.save(userRole);
+      console.log(`用户 ${userId} 已分配游客角色 ${visitorRole.id}`);
+
+      // 3. 查找博客管理和消息管理相关菜单
+      const blogMenus = await this.menuRepository.find({
+        where: [{ name: '博客管理' }, { name: '消息管理' }],
+      });
+
+      if (blogMenus && blogMenus.length > 0) {
+        // 获取这些父菜单的ID
+        const parentMenuIds = blogMenus.map((menu) => menu.id);
+
+        // 查找这些父菜单下的子菜单
+        const childMenus = await this.menuRepository.find({
+          where: { parentId: In(parentMenuIds) },
+        });
+
+        // 合并父菜单和子菜单
+        const allMenus = [...blogMenus, ...childMenus];
+
+        // 为角色分配这些菜单权限
+        for (const menu of allMenus) {
+          // 检查该权限是否已存在
+          const existingRoleMenu = await this.roleMenuRepository.findOne({
+            where: {
+              roleId: visitorRole.id,
+              menuId: menu.id,
+            },
+          });
+
+          if (!existingRoleMenu) {
+            const roleMenu = new RoleMenu();
+            roleMenu.roleId = visitorRole.id;
+            roleMenu.menuId = menu.id;
+            await this.roleMenuRepository.save(roleMenu);
+          }
+        }
+
+        console.log(`已为游客角色分配 ${allMenus.length} 个菜单权限`);
+      } else {
+        console.log('未找到博客管理或消息管理相关菜单');
+      }
+    } catch (error) {
+      console.error('为用户添加角色时出错:', error);
+    }
   }
 
   /**

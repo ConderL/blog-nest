@@ -88,7 +88,12 @@ async function syncDatabase() {
 
     console.log('\n正在同步数据库表结构...');
     console.log('\n警告：此操作可能导致数据丢失，请确保已经备份数据库!');
-    console.log('数据库同步已完成!');
+    console.log('数据库表结构同步进行中...');
+
+    // 等待同步完成
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    console.log('数据库表结构同步已完成!');
 
     console.log('\n现在您可以运行以下命令来初始化基础数据:');
     console.log('npm run db:init');

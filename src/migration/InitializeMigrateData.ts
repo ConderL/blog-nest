@@ -10,7 +10,7 @@ export class InitializeMigrateData1718500000000 implements MigrationInterface {
     console.log('开始初始化数据库基础数据...');
 
     // 1. 检查并创建管理员角色
-    const [roleRows] = await queryRunner.query('SELECT * FROM roles WHERE role_label = ?', [
+    const [roleRows] = await queryRunner.query('SELECT * FROM t_role WHERE role_label = ?', [
       'admin',
     ]);
 
@@ -20,7 +20,7 @@ export class InitializeMigrateData1718500000000 implements MigrationInterface {
       console.log('创建管理员角色...');
       const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
       const [result] = await queryRunner.query(
-        'INSERT INTO roles (roleName, role_label, remark, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO t_role (roleName, role_label, remark, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
         ['管理员', 'admin', '系统管理员，拥有所有权限', now, now],
       );
       adminRoleId = result.insertId;
@@ -31,7 +31,7 @@ export class InitializeMigrateData1718500000000 implements MigrationInterface {
     }
 
     // 2. 检查用户是否存在，如果不存在则创建默认管理员
-    const [userRows] = await queryRunner.query('SELECT * FROM users ORDER BY id ASC LIMIT 1');
+    const [userRows] = await queryRunner.query('SELECT * FROM t_user ORDER BY id ASC LIMIT 1');
 
     let userId: number = null;
 
@@ -43,7 +43,7 @@ export class InitializeMigrateData1718500000000 implements MigrationInterface {
 
       const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
       const [result] = await queryRunner.query(
-        'INSERT INTO users (username, nickname, password, avatar, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO t_user (username, nickname, password, avatar, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [
           'admin@blog.com',
           '管理员',
@@ -62,25 +62,31 @@ export class InitializeMigrateData1718500000000 implements MigrationInterface {
     }
 
     // 3. 为用户分配管理员角色
-    const [userRoleRows] = await queryRunner.query(
-      'SELECT * FROM user_roles WHERE user_id = ? AND role_id = ?',
+    const userRoleResults = await queryRunner.query(
+      'SELECT * FROM t_user_role WHERE user_id = ? AND role_id = ?',
       [userId, adminRoleId],
     );
 
-    if (!userRoleRows || userRoleRows.length === 0) {
+    // 检查结果是否为空，避免undefined错误
+    if (!userRoleResults || userRoleResults.length === 0 || userRoleResults[0].length === 0) {
       console.log('为用户分配管理员角色...');
-      const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-      await queryRunner.query(
-        'INSERT INTO user_roles (user_id, role_id, created_at, updated_at) VALUES (?, ?, ?, ?)',
-        [userId, adminRoleId, now, now],
-      );
-      console.log('管理员角色分配成功');
+
+      // 简化SQL语句，只使用必要的字段
+      try {
+        await queryRunner.query('INSERT INTO t_user_role (user_id, role_id) VALUES (?, ?)', [
+          userId,
+          adminRoleId,
+        ]);
+        console.log('管理员角色分配成功');
+      } catch (error) {
+        console.error('分配角色时出错:', error.message);
+      }
     } else {
       console.log('用户已拥有管理员角色');
     }
 
     // 4. 检查并创建基础站点配置
-    const [configRows] = await queryRunner.query('SELECT * FROM site_config LIMIT 1');
+    const [configRows] = await queryRunner.query('SELECT * FROM t_site_config LIMIT 1');
 
     if (!configRows || configRows.length === 0) {
       console.log('创建默认站点配置...');
@@ -103,7 +109,7 @@ export class InitializeMigrateData1718500000000 implements MigrationInterface {
 
       for (const config of configs) {
         await queryRunner.query(
-          'INSERT INTO site_config (config_name, config_value, remark, is_frontend, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO t_site_config (config_name, config_value, remark, is_frontend, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
           [config.name, config.value, config.remark, 1, now, now],
         );
       }

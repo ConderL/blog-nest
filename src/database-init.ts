@@ -85,10 +85,10 @@ async function initializeDatabase() {
 
     try {
       // 1. 检查并创建管理员角色
-      const roleTableExists = await queryRunner.hasTable('roles');
+      const roleTableExists = await queryRunner.hasTable('t_role');
       if (roleTableExists) {
         console.log('检查管理员角色...');
-        const roleRepo = dataSource.getRepository('roles');
+        const roleRepo = dataSource.getRepository('t_role');
         const adminRole = await roleRepo.findOne({ where: { roleLabel: 'admin' } });
 
         if (!adminRole) {
@@ -108,7 +108,7 @@ async function initializeDatabase() {
         }
 
         // 2. 检查并创建管理员用户
-        const userRepo = dataSource.getRepository('users');
+        const userRepo = dataSource.getRepository('t_user');
         const adminUser = await userRepo.findOne({ where: { username: 'admin@blog.com' } });
 
         if (!adminUser) {
@@ -134,7 +134,7 @@ async function initializeDatabase() {
           // 3. 分配角色给用户
           const role = await roleRepo.findOne({ where: { roleLabel: 'admin' } });
           if (role) {
-            const userRoleRepo = dataSource.getRepository('user_roles');
+            const userRoleRepo = dataSource.getRepository('t_user_role');
             const now = new Date();
             const userRole = userRoleRepo.create({
               userId: savedUser.id,
@@ -150,7 +150,7 @@ async function initializeDatabase() {
         }
 
         // 4. 检查并创建基础站点配置
-        const configRepo = dataSource.getRepository('site_config');
+        const configRepo = dataSource.getRepository('t_site_config');
         const configCount = await configRepo.count();
 
         if (configCount === 0) {

@@ -1,405 +1,278 @@
-import { createConnection } from 'typeorm';
+/**
+ * 数据库修复工具
+ *
+ * 修复数据库表结构和数据初始化问题
+ */
+
+import { DataSource } from 'typeorm';
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
 import * as path from 'path';
-import * as mysql from 'mysql2/promise';
 
-async function main() {
-  console.log('开始修复数据库...');
+// 加载环境变量
+try {
+  const envFile = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envFile)) {
+    console.log(`加载环境变量文件: ${envFile}`);
+    dotenv.config({ path: envFile });
+  } else {
+    console.log('未找到.env文件，将使用默认配置');
+    dotenv.config();
+  }
+} catch (error) {
+  console.warn('加载环境变量时出错，将使用默认配置:', error.message);
+}
 
+// 数据库配置
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '3306'),
+  username: process.env.DB_USERNAME || 'root',
+  password: process.env.DB_PASSWORD || 'root',
+  database: process.env.DB_DATABASE || 'blog',
+};
+
+// 创建数据源连接
+const dataSource = new DataSource({
+  type: 'mysql',
+  host: dbConfig.host,
+  port: dbConfig.port,
+  username: dbConfig.username,
+  password: dbConfig.password,
+  database: dbConfig.database,
+  synchronize: false, // 不自动同步
+  logging: true,
+});
+
+/**
+ * 修复数据库表结构
+ */
+async function fixDatabase() {
   try {
-    // 直接使用mysql2连接
-    console.log('尝试连接到MySQL...');
-    const connection = await mysql.createConnection({
-      host: 'localhost',
-      user: 'root',
-      password: 'wdrx4100',
-      database: 'blog',
-    });
+    console.log('数据库配置信息:');
+    console.log(`- 主机: ${dbConfig.host}`);
+    console.log(`- 端口: ${dbConfig.port}`);
+    console.log(`- 数据库: ${dbConfig.database}`);
 
-    console.log('MySQL连接成功!');
+    console.log('\n正在连接数据库...');
+    await dataSource.initialize();
+    console.log('数据库连接成功!');
 
-    let adminRoleId = null; // 将变量声明提前
+    // 获取查询器
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
 
     try {
-      // 先检查表是否存在
-      const [tables] = await connection.execute("SHOW TABLES LIKE 't_role'");
-      // @ts-ignore
-      if (tables.length === 0) {
-        console.log('创建角色表...');
-        await connection.execute(`
-          CREATE TABLE IF NOT EXISTS t_role (
-            id int NOT NULL AUTO_INCREMENT,
-            roleName varchar(50) NOT NULL,
-            role_label varchar(50) NOT NULL UNIQUE,
-            remark text,
-            created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at timestamp NULL DEFAULT NULL,
-            PRIMARY KEY (id)
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-        `);
-        console.log('角色表创建成功');
+      // 开始事务
+      await queryRunner.startTransaction();
+
+      console.log('\n开始修复数据库...');
+
+      // 1. 检查并创建数据库
+      await queryRunner.query(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`);
+      console.log(`确保数据库 ${dbConfig.database} 存在`);
+
+      // 2. 确保表存在
+      const createTables = [
+        `CREATE TABLE IF NOT EXISTS t_role (
+          id int NOT NULL AUTO_INCREMENT,
+          created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          roleName varchar(50) NOT NULL,
+          role_label varchar(50) NOT NULL,
+          remark text,
+          PRIMARY KEY (id),
+          UNIQUE KEY UK_role_label (role_label)
+        )`,
+        `CREATE TABLE IF NOT EXISTS t_menu (
+          id int NOT NULL AUTO_INCREMENT,
+          created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          menu_name varchar(50) NOT NULL,
+          path varchar(100) NOT NULL,
+          component varchar(100) DEFAULT NULL,
+          icon varchar(50) DEFAULT NULL,
+          parent_id int DEFAULT '0',
+          order_num int DEFAULT '1',
+          is_hidden tinyint(1) DEFAULT '0',
+          permission varchar(100) DEFAULT NULL,
+          type int DEFAULT '1',
+          PRIMARY KEY (id)
+        )`,
+        `CREATE TABLE IF NOT EXISTS t_role_menu (
+          role_id int NOT NULL,
+          menu_id int NOT NULL,
+          created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (role_id,menu_id)
+        )`,
+        `CREATE TABLE IF NOT EXISTS t_user (
+          id int NOT NULL AUTO_INCREMENT,
+          created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          nickname varchar(50) DEFAULT NULL,
+          username varchar(50) NOT NULL,
+          password varchar(100) NOT NULL,
+          avatar varchar(255) DEFAULT NULL,
+          web_site varchar(255) DEFAULT NULL,
+          intro varchar(255) DEFAULT NULL,
+          email varchar(50) DEFAULT NULL,
+          ip_address varchar(50) DEFAULT NULL,
+          ip_source varchar(50) DEFAULT NULL,
+          login_type tinyint DEFAULT '0',
+          is_disable tinyint(1) DEFAULT '0',
+          login_time datetime DEFAULT NULL,
+          status tinyint DEFAULT '1',
+          PRIMARY KEY (id),
+          UNIQUE KEY UK_username (username)
+        )`,
+        `CREATE TABLE IF NOT EXISTS t_user_role (
+          user_id int NOT NULL,
+          role_id int NOT NULL,
+          created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id,role_id)
+        )`,
+        `CREATE TABLE IF NOT EXISTS t_site_config (
+          id int NOT NULL AUTO_INCREMENT,
+          created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          config_name varchar(50) NOT NULL,
+          config_value text,
+          remark varchar(255) DEFAULT NULL,
+          is_frontend tinyint(1) DEFAULT '0',
+          PRIMARY KEY (id),
+          UNIQUE KEY UK_config_name (config_name)
+        )`,
+      ];
+
+      for (const sql of createTables) {
+        await queryRunner.query(sql);
       }
+      console.log('基础表结构创建完成');
 
-      // 创建用户表
-      const [userTables] = await connection.execute("SHOW TABLES LIKE 't_user'");
-      // @ts-ignore
-      if (userTables.length === 0) {
-        console.log('创建用户表...');
-        await connection.execute(`
-          CREATE TABLE IF NOT EXISTS t_user (
-            id int NOT NULL AUTO_INCREMENT,
-            username varchar(50) NOT NULL,
-            nickname varchar(50) NOT NULL,
-            password varchar(100) NOT NULL,
-            email varchar(100),
-            avatar varchar(255),
-            web_site varchar(255),
-            intro text,
-            ip_address varchar(50),
-            ip_source varchar(50),
-            login_type int DEFAULT 1,
-            is_disable int DEFAULT 0,
-            login_time timestamp NULL,
-            status int DEFAULT 1,
-            created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at timestamp NULL DEFAULT NULL,
-            PRIMARY KEY (id)
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-        `);
-        console.log('用户表创建成功');
+      // 3. 修复role_menu表的主键问题
+      try {
+        // 检查主键结构
+        const roleMenuPK = await queryRunner.query(`
+          SELECT COLUMN_NAME
+          FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+          WHERE TABLE_SCHEMA = '${dbConfig.database}'
+            AND TABLE_NAME = 't_role_menu'
+            AND CONSTRAINT_NAME = 'PRIMARY'
+          ORDER BY ORDINAL_POSITION`);
 
-        // 创建管理员用户
-        console.log('创建管理员用户...');
-        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        const [result] = await connection.execute(
-          'INSERT INTO t_user (username, nickname, password, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-          [
-            'admin',
-            '系统管理员',
-            '$2a$10$skTc5Qtf8TG.mQbWINu3d.0XQPQd9wDJUWWi.6hHbHXs.Hm7jSKqq',
-            'admin@example.com',
-            now,
-            now,
-          ],
-        );
-        console.log('管理员用户创建成功');
-      }
+        // 如果主键不是(role_id, menu_id)组合主键，修复
+        if (
+          roleMenuPK.length !== 2 ||
+          !(
+            (roleMenuPK[0].COLUMN_NAME === 'role_id' && roleMenuPK[1].COLUMN_NAME === 'menu_id') ||
+            (roleMenuPK[0].COLUMN_NAME === 'menu_id' && roleMenuPK[1].COLUMN_NAME === 'role_id')
+          )
+        ) {
+          // 尝试删除现有主键
+          try {
+            await queryRunner.query('ALTER TABLE t_role_menu DROP PRIMARY KEY');
+            console.log('删除t_role_menu现有主键');
+          } catch (e) {
+            console.log('t_role_menu没有主键或无法删除:', e.message);
+          }
 
-      // 创建用户角色关联表
-      const [userRoleTables] = await connection.execute("SHOW TABLES LIKE 't_user_role'");
-      // @ts-ignore
-      if (userRoleTables.length === 0) {
-        console.log('创建用户角色关联表...');
-        await connection.execute(`
-          CREATE TABLE IF NOT EXISTS t_user_role (
-            user_id int NOT NULL,
-            role_id int NOT NULL,
-            created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at timestamp NULL DEFAULT NULL,
-            PRIMARY KEY (user_id, role_id)
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-        `);
-        console.log('用户角色关联表创建成功');
-      }
-
-      // 检查管理员角色是否存在
-      const [roleRows] = await connection.execute('SELECT * FROM t_role WHERE role_label = ?', [
-        'admin',
-      ]);
-
-      // @ts-ignore - 忽略类型检查，roleRows是一个数组
-      if (roleRows.length === 0 || roleRows.length === undefined) {
-        console.log('创建管理员角色...');
-        // 创建管理员角色
-        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        const [result] = await connection.execute(
-          'INSERT INTO t_role (roleName, role_label, remark, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-          ['管理员', 'admin', '系统管理员，拥有所有权限', now, now],
-        );
-        // @ts-ignore
-        adminRoleId = result.insertId;
-        console.log('管理员角色创建成功，ID:', adminRoleId);
-      } else {
-        // @ts-ignore
-        adminRoleId = roleRows[0].id;
-        console.log('管理员角色已存在，ID:', adminRoleId);
-      }
-
-      // 获取第一个用户
-      const [userRows] = await connection.execute('SELECT * FROM t_user ORDER BY id ASC LIMIT 1');
-
-      // @ts-ignore - 忽略类型检查，userRows是一个数组
-      if (userRows.length > 0) {
-        // @ts-ignore
-        const firstUser = userRows[0];
-        console.log('找到用户:', firstUser.username);
-
-        // 检查用户是否已有管理员角色
-        const [userRoleRows] = await connection.execute(
-          'SELECT * FROM t_user_role WHERE user_id = ? AND role_id = ?',
-          [firstUser.id, adminRoleId],
-        );
-
-        // @ts-ignore - 忽略类型检查，userRoleRows是一个数组
-        if (userRoleRows.length === 0) {
-          // 分配管理员角色给用户
-          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-          await connection.execute(
-            'INSERT INTO t_user_role (user_id, role_id, created_at, updated_at) VALUES (?, ?, ?, ?)',
-            [firstUser.id, adminRoleId, now, now],
-          );
-          console.log('管理员角色已分配给用户:', firstUser.username);
+          // 添加新的复合主键
+          await queryRunner.query('ALTER TABLE t_role_menu ADD PRIMARY KEY (role_id, menu_id)');
+          console.log('设置t_role_menu表的复合主键(role_id, menu_id)');
         } else {
-          console.log('用户已拥有管理员角色');
+          console.log('t_role_menu表主键正常');
         }
-      } else {
-        console.log('未找到任何用户');
-
-        // 创建管理员用户
-        console.log('创建管理员用户...');
-        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        const [result] = await connection.execute(
-          'INSERT INTO t_user (username, nickname, password, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-          [
-            'admin',
-            '系统管理员',
-            '$2a$10$skTc5Qtf8TG.mQbWINu3d.0XQPQd9wDJUWWi.6hHbHXs.Hm7jSKqq',
-            'admin@example.com',
-            now,
-            now,
-          ],
-        );
-
-        // @ts-ignore
-        const userId = result.insertId;
-        console.log('管理员用户创建成功，ID:', userId);
-
-        // 分配管理员角色给新创建的用户
-        await connection.execute(
-          'INSERT INTO t_user_role (user_id, role_id, created_at, updated_at) VALUES (?, ?, ?, ?)',
-          [userId, adminRoleId, now, now],
-        );
-        console.log('管理员角色已分配给新创建的用户');
+      } catch (e) {
+        console.error('修复t_role_menu表主键时出错:', e);
       }
 
-      // 创建菜单表
-      const [menuTables] = await connection.execute("SHOW TABLES LIKE 't_menu'");
-      // @ts-ignore - 忽略类型检查，menuTables是一个数组
-      if (menuTables.length === 0 || menuTables.length === undefined) {
-        console.log('创建菜单表...');
-        await connection.execute(`
-          CREATE TABLE IF NOT EXISTS t_menu (
-            id int NOT NULL AUTO_INCREMENT,
-            name varchar(50) NOT NULL,
-            path varchar(50) NOT NULL,
-            component varchar(50),
-            icon varchar(50),
-            parent_id int DEFAULT 0,
-            order_num int DEFAULT 1,
-            hidden tinyint(1) DEFAULT 0,
-            type int DEFAULT 1,
-            perms varchar(100),
-            created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at timestamp NULL DEFAULT NULL,
-            PRIMARY KEY (id)
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      // 4. 修复visit_log表问题
+      try {
+        // 检查visit_log表
+        const visitLogExists = await queryRunner.query(`
+          SHOW TABLES LIKE 'visit_log'
         `);
-        console.log('菜单表创建成功');
-      }
 
-      // 创建角色菜单关联表
-      const [roleMenuTables] = await connection.execute("SHOW TABLES LIKE 't_role_menu'");
-      // @ts-ignore - 忽略类型检查，roleMenuTables是一个数组
-      if (roleMenuTables.length === 0 || roleMenuTables.length === undefined) {
-        console.log('创建角色菜单关联表...');
-        await connection.execute(`
-          CREATE TABLE IF NOT EXISTS t_role_menu (
-            role_id int NOT NULL,
-            menu_id int NOT NULL,
-            PRIMARY KEY (role_id, menu_id)
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+        const tVisitLogExists = await queryRunner.query(`
+          SHOW TABLES LIKE 't_visit_log'
         `);
-        console.log('角色菜单关联表创建成功');
-      }
 
-      // 检查菜单表是否已有数据
-      const [menuCount] = await connection.execute('SELECT COUNT(*) as count FROM t_menu');
-      // @ts-ignore
-      if (menuCount[0].count === 0) {
-        console.log('开始创建菜单数据...');
-        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-
-        // 1. 系统管理
-        const [systemResult] = await connection.execute(
-          `INSERT INTO t_menu (name, path, component, icon, order_num, parent_id, hidden, type, perms, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          ['系统管理', '/system', 'Layout', 'system', 1, 0, 0, 0, null, now, now],
-        );
-        // @ts-ignore
-        const systemId = systemResult.insertId;
-
-        // 2. 用户管理
-        const [userResult] = await connection.execute(
-          `INSERT INTO t_menu (name, path, component, icon, order_num, parent_id, hidden, type, perms, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            '用户管理',
-            'user',
-            'system/user/index',
-            'user',
-            1,
-            systemId,
-            0,
-            1,
-            'system:user:list',
-            now,
-            now,
-          ],
-        );
-        // @ts-ignore
-        const userId = userResult.insertId;
-
-        // 3. 角色管理
-        const [roleResult] = await connection.execute(
-          `INSERT INTO t_menu (name, path, component, icon, order_num, parent_id, hidden, type, perms, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            '角色管理',
-            'role',
-            'system/role/index',
-            'role',
-            2,
-            systemId,
-            0,
-            1,
-            'system:role:list',
-            now,
-            now,
-          ],
-        );
-        // @ts-ignore
-        const roleId = roleResult.insertId;
-
-        // 4. 菜单管理
-        const [menuResult] = await connection.execute(
-          `INSERT INTO t_menu (name, path, component, icon, order_num, parent_id, hidden, type, perms, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            '菜单管理',
-            'menu',
-            'system/menu/index',
-            'menu',
-            3,
-            systemId,
-            0,
-            1,
-            'system:menu:list',
-            now,
-            now,
-          ],
-        );
-        // @ts-ignore
-        const menuId = menuResult.insertId;
-
-        // 5. 内容管理
-        const [contentResult] = await connection.execute(
-          `INSERT INTO t_menu (name, path, component, icon, order_num, parent_id, hidden, type, perms, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          ['内容管理', '/content', 'Layout', 'document', 2, 0, 0, 0, null, now, now],
-        );
-        // @ts-ignore
-        const contentId = contentResult.insertId;
-
-        // 6. 文章管理
-        const [articleResult] = await connection.execute(
-          `INSERT INTO t_menu (name, path, component, icon, order_num, parent_id, hidden, type, perms, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            '文章管理',
-            'article',
-            'content/article/index',
-            'article',
-            1,
-            contentId,
-            0,
-            1,
-            'content:article:list',
-            now,
-            now,
-          ],
-        );
-
-        // 7. 分类管理
-        const [categoryResult] = await connection.execute(
-          `INSERT INTO t_menu (name, path, component, icon, order_num, parent_id, hidden, type, perms, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            '分类管理',
-            'category',
-            'content/category/index',
-            'category',
-            2,
-            contentId,
-            0,
-            1,
-            'content:category:list',
-            now,
-            now,
-          ],
-        );
-
-        // 8. 标签管理
-        const [tagResult] = await connection.execute(
-          `INSERT INTO t_menu (name, path, component, icon, order_num, parent_id, hidden, type, perms, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            '标签管理',
-            'tag',
-            'content/tag/index',
-            'tag',
-            3,
-            contentId,
-            0,
-            1,
-            'content:tag:list',
-            now,
-            now,
-          ],
-        );
-
-        // 获取所有菜单ID
-        const [allMenus] = await connection.execute('SELECT id FROM t_menu');
-
-        // 为管理员角色分配所有菜单权限
-        console.log('为管理员角色分配菜单权限...');
-        // @ts-ignore - 忽略类型检查，遍历allMenus
-        for (let i = 0; i < allMenus.length; i++) {
-          // @ts-ignore
-          const menuId = allMenus[i].id;
-          await connection.execute('INSERT INTO t_role_menu (role_id, menu_id) VALUES (?, ?)', [
-            adminRoleId,
-            menuId,
-          ]);
+        // 删除可能存在的冲突表
+        if (visitLogExists.length > 0) {
+          await queryRunner.query('DROP TABLE IF EXISTS visit_log');
+          console.log('删除冲突表visit_log');
         }
 
-        // @ts-ignore - 忽略类型检查，使用allMenus.length
-        console.log('菜单数据初始化完成，共创建菜单:', allMenus ? allMenus.length : 0);
-      } else {
-        console.log('菜单数据已存在，跳过创建');
+        // 确保t_visit_log表存在
+        if (tVisitLogExists.length === 0) {
+          await queryRunner.query(`
+            CREATE TABLE t_visit_log (
+              id int NOT NULL AUTO_INCREMENT,
+              created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              page_url varchar(255) DEFAULT NULL,
+              ip_address varchar(50) NOT NULL,
+              ip_source varchar(255) DEFAULT NULL,
+              os varchar(50) DEFAULT NULL,
+              browser varchar(50) DEFAULT NULL,
+              referer varchar(255) DEFAULT NULL,
+              user_id int DEFAULT NULL,
+              PRIMARY KEY (id)
+            )
+          `);
+          console.log('创建t_visit_log表');
+        } else {
+          console.log('t_visit_log表已存在');
+        }
+      } catch (e) {
+        console.error('修复访问日志表时出错:', e);
       }
-    } catch (err) {
-      console.error('数据库操作错误:', err);
+
+      // 提交事务
+      await queryRunner.commitTransaction();
+      console.log('\n数据库修复完成!');
+    } catch (error) {
+      // 回滚事务
+      await queryRunner.rollbackTransaction();
+      console.error('修复数据库时出错:', error);
+      throw error;
+    } finally {
+      // 释放查询器
+      await queryRunner.release();
     }
 
-    // 关闭数据库连接
-    await connection.end();
-    console.log('数据库修复完成!');
+    console.log('\n现在您可以运行以下命令来进行数据初始化:');
+    console.log('npm run db:init');
   } catch (error) {
-    console.error('修复数据库时出错:', error);
+    console.error('修复数据库失败:', error);
+
+    if (error.code === 'ER_ACCESS_DENIED_ERROR') {
+      console.error('错误: 数据库访问被拒绝。请检查用户名和密码设置。');
+    } else if (error.code === 'ECONNREFUSED') {
+      console.error(
+        '错误: 无法连接到数据库服务器。请检查主机和端口设置，并确保MySQL服务正在运行。',
+      );
+    }
+
+    process.exit(1);
+  } finally {
+    // 关闭数据库连接
+    if (dataSource.isInitialized) {
+      await dataSource.destroy();
+      console.log('数据库连接已关闭');
+    }
   }
 }
 
-// 执行主函数
-main().catch((error) => {
-  console.error('程序执行失败:', error);
-  process.exit(1);
-});
+// 运行修复
+fixDatabase()
+  .then(() => {
+    console.log('数据库修复完成!');
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('数据库修复失败:', error);
+    process.exit(1);
+  });

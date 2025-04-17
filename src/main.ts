@@ -60,11 +60,11 @@ async function bootstrap() {
 async function checkDatabaseInitialization(dataSource: DataSource, logger: Logger) {
   try {
     // 检查数据库中是否有角色表及其数据
-    const roleCount = await dataSource.query('SELECT COUNT(*) as count FROM roles');
+    const roleCount = await dataSource.query('SELECT COUNT(*) as count FROM t_role');
     const hasRoles = roleCount[0].count > 0;
 
     // 检查数据库中是否有菜单表及其数据
-    const menuCount = await dataSource.query('SELECT COUNT(*) as count FROM menus');
+    const menuCount = await dataSource.query('SELECT COUNT(*) as count FROM t_menu');
     const hasMenus = menuCount[0].count > 0;
 
     if (!hasRoles || !hasMenus) {

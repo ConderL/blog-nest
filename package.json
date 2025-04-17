@@ -24,7 +24,12 @@
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d ormconfig.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d ormconfig.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d ormconfig.ts",
-    "db:init": "ts-node src/migration/runner.ts",
+    "db": "ts-node src/scripts/db-manager.ts",
+    "db:fix": "ts-node src/scripts/db-manager.ts fix",
+    "db:init": "ts-node src/scripts/db-manager.ts init",
+    "db:admin": "ts-node src/scripts/db-manager.ts admin",
+    "db:menus": "ts-node src/scripts/db-manager.ts menus",
+    "db:all": "ts-node src/scripts/db-manager.ts all",
     "db:sync": "ts-node src/database-sync.ts",
     "db:docker-init": "nest build && node dist/database-init.js"
   },

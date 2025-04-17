@@ -34,7 +34,7 @@ import configuration from './config/configuration';
         password: configService.get('database.password', 'root'),
         database: configService.get('database.database', 'blog'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: true,
+        synchronize: false,
         // logging: process.env.NODE_ENV !== 'production',
       }),
     }),

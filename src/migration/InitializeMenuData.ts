@@ -8,22 +8,30 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
     console.log('开始初始化菜单数据...');
 
     // 1. 获取管理员角色ID
-    const [roleRows] = await queryRunner.query('SELECT * FROM roles WHERE role_label = ?', [
+    const roleResults = await queryRunner.query('SELECT * FROM t_role WHERE role_label = ?', [
       'admin',
     ]);
 
-    if (!roleRows || roleRows.length === 0) {
+    if (!roleResults || roleResults.length === 0 || roleResults[0].length === 0) {
       console.log('错误: 未找到管理员角色，请先运行InitializeMigrateData迁移');
       return;
     }
 
-    const adminRoleId = roleRows[0].id;
+    // 确保我们访问的是正确的对象和属性
+    const role = roleResults[0];
+    const adminRoleId = role.id;
     console.log('找到管理员角色，ID:', adminRoleId);
 
     // 2. 检查菜单表是否已有数据
-    const [menuCount] = await queryRunner.query('SELECT COUNT(*) as count FROM menus');
+    const menuCountResult = await queryRunner.query('SELECT COUNT(*) as count FROM t_menu');
 
-    if (menuCount && menuCount.count > 0) {
+    // 确保访问正确的结果
+    const menuCount =
+      menuCountResult && menuCountResult[0] && menuCountResult[0].count
+        ? menuCountResult[0].count
+        : 0;
+
+    if (menuCount > 0) {
       console.log('菜单数据已存在，跳过初始化');
       return;
     }
@@ -34,8 +42,8 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     // 系统管理
-    const [systemResult] = await queryRunner.query(
-      `INSERT INTO menus (
+    const systemResult = await queryRunner.query(
+      `INSERT INTO t_menu (
         menu_name, path, component, icon, order_num, 
         parent_id, is_hidden, permission, type, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -44,8 +52,8 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
     const systemId = systemResult.insertId;
 
     // 用户管理
-    const [userResult] = await queryRunner.query(
-      `INSERT INTO menus (
+    const userResult = await queryRunner.query(
+      `INSERT INTO t_menu (
         menu_name, path, component, icon, order_num, 
         parent_id, is_hidden, permission, type, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -66,8 +74,8 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
     const userId = userResult.insertId;
 
     // 角色管理
-    const [roleResult] = await queryRunner.query(
-      `INSERT INTO menus (
+    const roleResult = await queryRunner.query(
+      `INSERT INTO t_menu (
         menu_name, path, component, icon, order_num, 
         parent_id, is_hidden, permission, type, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -88,8 +96,8 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
     const roleId = roleResult.insertId;
 
     // 菜单管理
-    const [menuResult] = await queryRunner.query(
-      `INSERT INTO menus (
+    const menuResult = await queryRunner.query(
+      `INSERT INTO t_menu (
         menu_name, path, component, icon, order_num, 
         parent_id, is_hidden, permission, type, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -110,8 +118,8 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
     const menuId = menuResult.insertId;
 
     // 内容管理
-    const [contentResult] = await queryRunner.query(
-      `INSERT INTO menus (
+    const contentResult = await queryRunner.query(
+      `INSERT INTO t_menu (
         menu_name, path, component, icon, order_num, 
         parent_id, is_hidden, permission, type, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -120,8 +128,8 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
     const contentId = contentResult.insertId;
 
     // 文章管理
-    const [articleResult] = await queryRunner.query(
-      `INSERT INTO menus (
+    const articleResult = await queryRunner.query(
+      `INSERT INTO t_menu (
         menu_name, path, component, icon, order_num, 
         parent_id, is_hidden, permission, type, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -141,8 +149,8 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
     );
 
     // 分类管理
-    const [categoryResult] = await queryRunner.query(
-      `INSERT INTO menus (
+    const categoryResult = await queryRunner.query(
+      `INSERT INTO t_menu (
         menu_name, path, component, icon, order_num, 
         parent_id, is_hidden, permission, type, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -162,8 +170,8 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
     );
 
     // 标签管理
-    const [tagResult] = await queryRunner.query(
-      `INSERT INTO menus (
+    const tagResult = await queryRunner.query(
+      `INSERT INTO t_menu (
         menu_name, path, component, icon, order_num, 
         parent_id, is_hidden, permission, type, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -183,7 +191,7 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
     );
 
     // 获取所有菜单ID用于分配给管理员角色
-    const [allMenus] = await queryRunner.query('SELECT id FROM menus');
+    const allMenus = await queryRunner.query('SELECT id FROM t_menu');
     const menuIds = allMenus.map((menu) => menu.id);
 
     // 4. 为管理员角色分配所有菜单权限
@@ -191,10 +199,10 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
 
     // 批量插入角色-菜单关联数据
     for (const menuId of menuIds) {
-      await queryRunner.query(
-        'INSERT INTO role_menus (role_id, menu_id, created_at, updated_at) VALUES (?, ?, ?, ?)',
-        [adminRoleId, menuId, now, now],
-      );
+      await queryRunner.query('INSERT INTO t_role_menu (role_id, menu_id) VALUES (?, ?)', [
+        adminRoleId,
+        menuId,
+      ]);
     }
 
     console.log('菜单数据初始化完成!');
@@ -202,8 +210,8 @@ export class InitializeMenuData1718500001000 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // 清空菜单和角色-菜单关联数据
-    await queryRunner.query('DELETE FROM role_menus');
-    await queryRunner.query('DELETE FROM menus');
+    await queryRunner.query('DELETE FROM t_role_menu');
+    await queryRunner.query('DELETE FROM t_menu');
     console.log('菜单数据已清空');
   }
 }
