@@ -29,7 +29,7 @@ export class UserService {
   async findByUsername(username: string): Promise<User> {
     return this.userRepository.findOne({
       where: { username },
-      select: ['id', 'username', 'password', 'nickname', 'avatar', 'email', 'status'],
+      select: ['id', 'username', 'password', 'nickname', 'avatar', 'email'],
     });
   }
 
@@ -39,7 +39,7 @@ export class UserService {
   async findById(id: number): Promise<User> {
     return this.userRepository.findOne({
       where: { id },
-      select: ['id', 'username', 'nickname', 'avatar', 'email', 'status'],
+      select: ['id', 'username', 'nickname', 'avatar', 'email'],
     });
   }
 

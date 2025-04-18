@@ -25,13 +25,10 @@ export class LogService {
     userAgent: string;
     url: string;
     page: string;
-    referer?: string;
-    userId?: number;
   }): Promise<VisitLog> {
     try {
       let browser = '未知';
       let os = '未知';
-      let device = 'desktop';
 
       if (data.userAgent.includes('Chrome')) {
         browser = 'Chrome';
@@ -53,35 +50,28 @@ export class LogService {
         os = 'Linux';
       } else if (data.userAgent.includes('Android')) {
         os = 'Android';
-        device = 'mobile';
       } else if (data.userAgent.includes('iPhone')) {
         os = 'iOS';
-        device = 'mobile';
       } else if (data.userAgent.includes('iPad')) {
         os = 'iOS';
-        device = 'tablet';
       }
 
-      let ipLocation = '';
+      // 尝试获取IP地理位置
+      let ipSourceInfo = '';
       try {
-        const ipSource = await this.getIpSource(data.ip);
-        ipLocation = ipSource || '';
+        ipSourceInfo = (await this.getIpSource(data.ip)) || '';
       } catch (error) {
         this.logger.error(`获取IP地理位置失败: ${error.message}`);
       }
 
-      const visitLog = this.visitLogRepository.create({
-        ip: data.ip,
-        userAgent: data.userAgent,
-        browser,
-        os,
-        url: data.url,
-        page: data.page,
-        referer: data.referer,
-        userId: data.userId,
-        device,
-        ipLocation,
-      });
+      // 创建VisitLog对象，字段名与实体定义一致
+      const visitLog = new VisitLog();
+      visitLog.ipAddress = data.ip;
+      visitLog.page = data.page;
+      visitLog.browser = browser;
+      visitLog.os = os;
+      visitLog.ipSource = ipSourceInfo;
+      visitLog.createTime = new Date(); // 手动设置当前时间
 
       return this.visitLogRepository.save(visitLog);
     } catch (error) {
@@ -170,26 +160,13 @@ export class LogService {
   }
 
   /**
-   * 更新访问日志停留时间
-   */
-  async updateStayTime(logId: number, stayTime: number): Promise<boolean> {
-    try {
-      const result = await this.visitLogRepository.update(logId, { stayTime });
-      return result.affected > 0;
-    } catch (error) {
-      this.logger.error(`更新停留时间失败: ${error.message}`);
-      return false;
-    }
-  }
-
-  /**
    * 清理指定日期之前的访问日志
    */
   async cleanupOldLogs(days: number = 30): Promise<number> {
     try {
       const cutoffDate = moment().subtract(days, 'days').toDate();
       const result = await this.visitLogRepository.delete({
-        createdAt: LessThan(cutoffDate) as any,
+        createTime: LessThan(cutoffDate) as any,
       });
 
       return result.affected || 0;
@@ -204,7 +181,7 @@ export class LogService {
    */
   async getRecentVisits(limit: number = 10): Promise<VisitLog[]> {
     return this.visitLogRepository.find({
-      order: { createdAt: 'DESC' } as any,
+      order: { createTime: 'DESC' } as any,
       take: limit,
     });
   }
@@ -225,7 +202,7 @@ export class LogService {
   async countVisits(startDate: Date, endDate: Date): Promise<number> {
     return this.visitLogRepository.count({
       where: {
-        createdAt: Between(startDate, endDate) as any,
+        createTime: Between(startDate, endDate) as any,
       },
     });
   }
@@ -236,8 +213,8 @@ export class LogService {
   async countUniqueVisitors(startDate: Date, endDate: Date): Promise<number> {
     const result = await this.visitLogRepository
       .createQueryBuilder('log')
-      .select('COUNT(DISTINCT log.ip)', 'count')
-      .where('log.createdAt BETWEEN :startDate AND :endDate', { startDate, endDate })
+      .select('COUNT(DISTINCT log.ipAddress)', 'count')
+      .where('log.createTime BETWEEN :startDate AND :endDate', { startDate, endDate })
       .getRawOne();
 
     return parseInt(result.count, 10);
@@ -252,9 +229,9 @@ export class LogService {
 
     const result = await this.visitLogRepository
       .createQueryBuilder('log')
-      .select('HOUR(log.createdAt)', 'hour')
+      .select('HOUR(log.createTime)', 'hour')
       .addSelect('COUNT(log.id)', 'count')
-      .where('log.createdAt BETWEEN :startOfDay AND :endOfDay', { startOfDay, endOfDay })
+      .where('log.createTime BETWEEN :startOfDay AND :endOfDay', { startOfDay, endOfDay })
       .groupBy('hour')
       .orderBy('hour', 'ASC')
       .getRawMany();

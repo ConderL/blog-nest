@@ -3,7 +3,6 @@ import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
 import { LoginDto } from '../user/dto/login.dto';
 import { ResultDto } from '../../common/dtos/result.dto';
-import { StatusCodeEnum } from '../../common/enums/status-code.enum';
 import * as bcrypt from 'bcryptjs';
 import * as forge from 'node-forge';
 
@@ -141,10 +140,6 @@ export class AuthService {
     try {
       const user = await this.validateUser(loginDto.username, loginDto.password);
 
-      if (user.status !== 1) {
-        throw new UnauthorizedException('账号已被禁用');
-      }
-
       const payload = { username: user.username, sub: user.id };
       const token = this.jwtService.sign(payload);
 
@@ -214,11 +209,6 @@ export class AuthService {
     try {
       const user = await this.validateUser(loginDto.username, loginDto.password);
       this.logger.log(`用户验证成功: ${user.username}`);
-
-      if (user.status !== 1) {
-        this.logger.warn(`账号已被禁用: ${user.username}`);
-        throw new UnauthorizedException('账号已被禁用');
-      }
 
       // 获取用户角色
       const roleList = await this.userService.getUserRoles(user.id);

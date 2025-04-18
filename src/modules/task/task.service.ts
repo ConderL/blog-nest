@@ -62,7 +62,7 @@ export class TaskService {
 
     const visits = await this.visitLogRepository.count({
       where: {
-        createdAt: Between(hourAgo, now) as any,
+        createTime: Between(hourAgo, now) as any,
       },
     });
 
@@ -79,7 +79,7 @@ export class TaskService {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const result = await this.visitLogRepository.delete({
-      createdAt: LessThan(thirtyDaysAgo) as any,
+      createTime: LessThan(thirtyDaysAgo) as any,
     });
 
     this.logger.log(`已清理 ${result.affected || 0} 条过期访问日志`);
@@ -147,7 +147,7 @@ export class TaskService {
 
     const todayVisits = await this.visitLogRepository.count({
       where: {
-        createdAt: Between(today, new Date()) as any,
+        createTime: Between(today, new Date()) as any,
       },
     });
 
@@ -177,7 +177,7 @@ export class TaskService {
 
       const count = await this.visitLogRepository.count({
         where: {
-          createdAt: Between(date.toDate(), nextDate.toDate()) as any,
+          createTime: Between(date.toDate(), nextDate.toDate()) as any,
         },
       });
 
@@ -288,7 +288,7 @@ export class TaskService {
 
       const count = await this.visitLogRepository.count({
         where: {
-          createdAt: Between(current.toDate(), nextDay.toDate()) as any,
+          createTime: Between(current.toDate(), nextDay.toDate()) as any,
         },
       });
 
@@ -309,10 +309,10 @@ export class TaskService {
   private async getTopIPs(startDate: Date, endDate: Date, limit: number = 10): Promise<any[]> {
     const result = await this.visitLogRepository
       .createQueryBuilder('visitLog')
-      .select('visitLog.ip')
+      .select('visitLog.ipAddress')
       .addSelect('COUNT(*)', 'count')
-      .where('visitLog.createdAt BETWEEN :startDate AND :endDate', { startDate, endDate })
-      .groupBy('visitLog.ip')
+      .where('visitLog.createTime BETWEEN :startDate AND :endDate', { startDate, endDate })
+      .groupBy('visitLog.ipAddress')
       .orderBy('count', 'DESC')
       .limit(limit)
       .getRawMany();
@@ -326,10 +326,10 @@ export class TaskService {
   private async getTopPages(startDate: Date, endDate: Date, limit: number = 10): Promise<any[]> {
     const result = await this.visitLogRepository
       .createQueryBuilder('visitLog')
-      .select('visitLog.pageUrl')
+      .select('visitLog.page')
       .addSelect('COUNT(*)', 'count')
-      .where('visitLog.createdAt BETWEEN :startDate AND :endDate', { startDate, endDate })
-      .groupBy('visitLog.pageUrl')
+      .where('visitLog.createTime BETWEEN :startDate AND :endDate', { startDate, endDate })
+      .groupBy('visitLog.page')
       .orderBy('count', 'DESC')
       .limit(limit)
       .getRawMany();

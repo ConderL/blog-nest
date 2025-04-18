@@ -38,18 +38,6 @@ export class VisitLog extends BaseEntity {
   browser: string;
 
   /**
-   * 来源页面
-   */
-  @Column({ nullable: true })
-  referer: string;
-
-  /**
-   * 用户ID（登录用户的访问）
-   */
-  @Column({ name: 'user_id', nullable: true })
-  userId: number;
-
-  /**
    * 创建时间
    */
   @CreateDateColumn({ name: 'create_time' })

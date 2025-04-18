@@ -50,7 +50,6 @@ export class VisitLogInterceptor implements NestInterceptor {
           pageUrl: url,
           browser: browser,
           os: os,
-          referer: headers['referer'] || '',
         });
       }),
     );

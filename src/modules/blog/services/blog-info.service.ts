@@ -45,7 +45,6 @@ export class BlogInfoService {
     // 从请求对象中获取访客信息
     const userAgent = req.headers['user-agent'];
     const ipAddress = IPUtil.getClientIp(req);
-    const referer = req.headers['referer'] || '';
     const url = req.url || req.originalUrl || '/';
 
     // 创建访问日志
@@ -54,7 +53,6 @@ export class BlogInfoService {
       ipSource: await IPUtil.getIpSource(ipAddress),
       browser: this.getBrowserName(userAgent),
       os: this.getOsInfo(userAgent),
-      referer,
       pageUrl: url,
     };
 

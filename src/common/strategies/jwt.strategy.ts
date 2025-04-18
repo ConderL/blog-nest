@@ -43,7 +43,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         return {
           id: id,
           username: payload.username || 'unknown',
-          status: 1, // 假设用户状态为正常
         };
       }
 
@@ -55,7 +54,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       return {
         id: payload.sub,
         username: payload.username || 'unknown',
-        status: 1,
       };
     }
   }

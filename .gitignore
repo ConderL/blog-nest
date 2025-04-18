@@ -50,5 +50,5 @@ pm2.log
 nginx/error.log
 nginx/access.log
 
-db_data/mysql.sock
+/db_data
 pnpm-lock.yaml

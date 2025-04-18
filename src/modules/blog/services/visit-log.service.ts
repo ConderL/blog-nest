@@ -21,15 +21,14 @@ export class VisitLogService {
    * @returns 创建后的访问日志
    */
   async create(visitLog: Partial<VisitLog>): Promise<VisitLog> {
-    // 确保必填字段都有值
+    // 确保必填字段都有值，并且适应现有表结构
     const newVisitLog = this.visitLogRepository.create({
       ipAddress: visitLog.ipAddress || '0.0.0.0',
       pageUrl: visitLog.pageUrl || '/',
       ipSource: visitLog.ipSource || '',
       browser: visitLog.browser || '未知浏览器',
       os: visitLog.os || '未知系统',
-      referer: visitLog.referer || '',
-      userId: visitLog.userId || null,
+      createTime: new Date(), // 手动设置当前时间
     });
 
     return await this.visitLogRepository.save(newVisitLog);

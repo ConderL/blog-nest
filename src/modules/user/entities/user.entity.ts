@@ -38,7 +38,4 @@ export class User extends BaseEntity {
 
   @Column({ name: 'login_time', type: 'timestamp', nullable: true })
   loginTime: Date;
-
-  @Column({ default: 1 })
-  status: number;
 }
