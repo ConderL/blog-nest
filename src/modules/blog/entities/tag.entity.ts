@@ -3,6 +3,6 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 
 @Entity('t_tag')
 export class Tag extends BaseEntity {
-  @Column({ length: 50 })
+  @Column({ name: 'tag_name', length: 20 })
   tagName: string;
 }

@@ -1,4 +1,4 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, CreateDateColumn } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
 /**
@@ -10,7 +10,7 @@ export class VisitLog extends BaseEntity {
   /**
    * 访问的页面URL
    */
-  @Column({ name: 'page_url', nullable: true })
+  @Column({ name: 'page', nullable: true })
   pageUrl: string;
 
   /**
@@ -48,4 +48,10 @@ export class VisitLog extends BaseEntity {
    */
   @Column({ name: 'user_id', nullable: true })
   userId: number;
+
+  /**
+   * 创建时间
+   */
+  @CreateDateColumn({ name: 'create_time' })
+  createTime: Date;
 }

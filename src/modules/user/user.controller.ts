@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Put, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Put, Param, UseGuards, Request, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { MenuService } from './services/menu.service';
@@ -79,116 +79,21 @@ export class UserController {
 
   @Get('getUserMenu')
   @ApiOperation({ summary: '获取当前登录用户菜单' })
-  @Public() // 允许公开访问，便于测试
-  async getUserMenu(): Promise<ResultDto<any>> {
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  async getUserMenu(@Req() req: any): Promise<ResultDto<any>> {
     try {
-      console.log('AdminUserController.getUserMenu - 修复图标问题');
+      console.log('获取用户菜单 - 用户ID:', req.user.id);
 
-      // 完整的菜单结构，修复图标显示问题
-      const menuData = [
-        {
-          name: '系统管理',
-          path: '/system',
-          component: 'Layout',
-          alwaysShow: true,
-          meta: { title: '系统管理', icon: 'system' },
-          children: [
-            {
-              name: '用户管理',
-              path: 'user',
-              component: 'system/user/index',
-              meta: { title: '用户管理', icon: 'user' },
-            },
-            {
-              name: '角色管理',
-              path: 'role',
-              component: 'system/role/index',
-              meta: { title: '角色管理', icon: 'guide' },
-            },
-            {
-              name: '菜单管理',
-              path: 'menu',
-              component: 'system/menu/index',
-              meta: { title: '菜单管理', icon: 'list' },
-            },
-            {
-              name: '操作日志',
-              path: 'log/operation',
-              component: 'system/log/operation',
-              meta: { title: '操作日志', icon: 'log' },
-            },
-          ],
-        },
-        {
-          name: '博客管理',
-          path: '/blog',
-          component: 'Layout',
-          alwaysShow: true,
-          meta: { title: '博客管理', icon: 'article' },
-          children: [
-            {
-              name: '文章管理',
-              path: 'article/list',
-              component: 'blog/article/list',
-              meta: { title: '文章管理', icon: 'article' },
-            },
-            {
-              name: '分类管理',
-              path: 'category',
-              component: 'blog/category/index',
-              meta: { title: '分类管理', icon: 'category' },
-            },
-            {
-              name: '标签管理',
-              path: 'tag',
-              component: 'blog/tag/index',
-              meta: { title: '标签管理', icon: 'tag' },
-            },
-          ],
-        },
-        {
-          name: '消息管理',
-          path: '/news',
-          component: 'Layout',
-          alwaysShow: true,
-          meta: { title: '消息管理', icon: 'message' },
-          children: [
-            {
-              name: '评论管理',
-              path: 'comment',
-              component: 'news/comment/index',
-              meta: { title: '评论管理', icon: 'comment' },
-            },
-            {
-              name: '留言管理',
-              path: 'message',
-              component: 'news/message/index',
-              meta: { title: '留言管理', icon: 'message' },
-            },
-          ],
-        },
-        {
-          name: '系统监控',
-          path: '/monitor',
-          component: 'Layout',
-          alwaysShow: true,
-          meta: { title: '系统监控', icon: 'monitor' },
-          children: [
-            {
-              name: '在线用户',
-              path: 'online',
-              component: 'monitor/online/index',
-              meta: { title: '在线用户', icon: 'online' },
-            },
-            {
-              name: '定时任务',
-              path: 'task',
-              component: 'monitor/task/index',
-              meta: { title: '定时任务', icon: 'job' },
-            },
-          ],
-        },
-      ];
+      // 从数据库获取用户菜单
+      const menus = await this.userService.getUserMenuTree(req.user.id);
+
+      if (!menus || menus.length === 0) {
+        return ResultDto.fail('没有找到菜单数据');
+      }
+
+      // 转换菜单数据为前端路由格式
+      const menuData = menus.map((menu) => this.formatMenuTree(menu));
 
       return ResultDto.success(menuData);
     } catch (error) {
@@ -198,141 +103,28 @@ export class UserController {
   }
 
   /**
-   * 格式化菜单为前端需要的格式
+   * 将数据库菜单格式转换为前端路由格式
    */
-  private formatMenusForFrontend(menus: any[]): any[] {
-    console.log('formatMenusForFrontend - 输入菜单数量:', menus.length);
-    console.log('formatMenusForFrontend - 输入菜单数据:', JSON.stringify(menus));
-
-    // 先找出所有顶级菜单
-    const topMenus = menus.filter((menu) => menu.parentId === 0);
-    console.log('formatMenusForFrontend - 顶级菜单数量:', topMenus.length);
-
-    const result = topMenus.map((menu) => this.formatSingleMenu(menu, menus));
-    console.log('formatMenusForFrontend - 最终返回菜单数量:', result.length);
-    console.log('formatMenusForFrontend - 最终返回菜单结构:', JSON.stringify(result));
-
-    return result;
-  }
-
-  /**
-   * 获取路由路径
-   */
-  private getRouterPath(menu: any): string {
-    // 顶级目录
-    if (menu.parentId === 0 && menu.type === 0) {
-      return `/${menu.path}`;
-    }
-    // 顶级菜单
-    else if (menu.parentId === 0 && menu.type === 1) {
-      return '/';
-    }
-    return menu.path;
-  }
-
-  /**
-   * 获取组件信息
-   */
-  private getComponent(menu: any, allMenus: any[]): any {
-    // 布局组件
-    if (menu.component === 'Layout') {
-      return 'Layout';
-    }
-    // 父级视图组件
-    else if (menu.component === 'ParentView') {
-      return 'ParentView';
-    }
-    // 顶级目录
-    else if (menu.parentId === 0 && menu.type === 0) {
-      return 'Layout';
-    }
-    // 顶级菜单
-    else if (menu.parentId === 0 && menu.type === 1) {
-      return 'Layout';
-    }
-    // 子菜单但是父级是目录
-    else if (menu.parentId !== 0 && this.isParentDirectory(menu.parentId, allMenus)) {
-      return 'ParentView';
-    }
-
-    // 检查组件路径是否标准
-    if (menu.component) {
-      // 处理路径格式，确保前端能正确解析
-      // 1. 系统管理
-      if (menu.component.startsWith('system/')) {
-        return menu.component;
-      }
-      // 2. 博客管理
-      else if (menu.component.startsWith('blog/')) {
-        return menu.component;
-      }
-      // 3. 监控管理
-      else if (menu.component.startsWith('monitor/')) {
-        return menu.component;
-      }
-    }
-
-    return menu.component;
-  }
-
-  /**
-   * 判断父菜单是否为目录
-   */
-  private isParentDirectory(parentId: number, menus: any[]): boolean {
-    const parent = menus.find((menu) => menu.id === parentId);
-    return parent && parent.type === 0;
-  }
-
-  /**
-   * 格式化单个菜单项
-   */
-  private formatSingleMenu(menu: any, allMenus: any[]): any {
-    console.log('格式化菜单项:', menu.name, '类型:', menu.type, '父ID:', menu.parentId);
-
-    // 参照blog-boot项目的格式创建路由对象
+  private formatMenuTree(menu: any): any {
+    // 基本菜单项结构
     const routerItem: any = {
       name: menu.name,
-      path: this.getRouterPath(menu),
-      component: this.getComponent(menu, allMenus),
+      path: menu.parentId === 0 ? `/${menu.path}` : menu.path,
+      component: menu.parentId === 0 ? 'Layout' : menu.component,
       meta: {
         title: menu.name,
         icon: menu.icon,
-        hidden: menu.hidden === 1,
+        hidden: menu.isHidden === 1,
       },
     };
 
-    // 目录类型 (type = 0)
-    if (menu.type === 0) {
-      // 查找子菜单
-      const children = allMenus
-        .filter((item) => item.parentId === menu.id)
-        .map((item) => this.formatSingleMenu(item, allMenus))
-        .filter((item) => item); // 过滤掉null和undefined
-
-      // 如果有子菜单，设置alwaysShow和redirect
-      if (children && children.length > 0) {
-        routerItem.alwaysShow = true;
-        routerItem.redirect = 'noRedirect';
-        routerItem.children = children;
-      }
-    }
-    // 外部菜单 (以http开头的路由)
-    else if (menu.path && menu.path.startsWith('http')) {
-      routerItem.meta.link = menu.path;
-    }
-    // 一级菜单项 (parentId = 0 且 type = 1)
-    else if (menu.parentId === 0 && menu.type === 1) {
-      // 一级菜单不创建子路由，直接使用组件
-      routerItem.meta = {
-        title: menu.name,
-        icon: menu.icon,
-        hidden: menu.hidden === 1,
-      };
-      // 不创建children，直接使用component
-      routerItem.component = menu.component;
+    // 如果有子菜单
+    if (menu.children && menu.children.length > 0) {
+      routerItem.alwaysShow = true;
+      routerItem.redirect = 'noRedirect';
+      routerItem.children = menu.children.map((child) => this.formatMenuTree(child));
     }
 
-    console.log('格式化结果:', routerItem.path, routerItem.component);
     return routerItem;
   }
 }
@@ -425,116 +217,27 @@ export class AdminUserController {
 
   @Get('getUserMenu')
   @ApiOperation({ summary: '获取当前登录用户菜单' })
-  @Public() // 允许公开访问，便于测试
-  async getUserMenu(): Promise<ResultDto<any>> {
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  async getUserMenu(@Req() req: any): Promise<ResultDto<any>> {
     try {
-      console.log('AdminUserController.getUserMenu - 修复图标问题');
+      console.log('管理员获取用户菜单 - 用户ID:', req.user.id);
 
-      // 完整的菜单结构，修复图标显示问题
-      const menuData = [
-        {
-          name: '系统管理',
-          path: '/system',
-          component: 'Layout',
-          alwaysShow: true,
-          meta: { title: '系统管理', icon: 'system' },
-          children: [
-            {
-              name: '用户管理',
-              path: 'user',
-              component: 'system/user/index',
-              meta: { title: '用户管理', icon: 'user' },
-            },
-            {
-              name: '角色管理',
-              path: 'role',
-              component: 'system/role/index',
-              meta: { title: '角色管理', icon: 'guide' },
-            },
-            {
-              name: '菜单管理',
-              path: 'menu',
-              component: 'system/menu/index',
-              meta: { title: '菜单管理', icon: 'list' },
-            },
-            {
-              name: '操作日志',
-              path: 'log/operation',
-              component: 'system/log/operation',
-              meta: { title: '操作日志', icon: 'log' },
-            },
-          ],
-        },
-        {
-          name: '博客管理',
-          path: '/blog',
-          component: 'Layout',
-          alwaysShow: true,
-          meta: { title: '博客管理', icon: 'article' },
-          children: [
-            {
-              name: '文章管理',
-              path: 'article/list',
-              component: 'blog/article/list',
-              meta: { title: '文章管理', icon: 'article' },
-            },
-            {
-              name: '分类管理',
-              path: 'category',
-              component: 'blog/category/index',
-              meta: { title: '分类管理', icon: 'category' },
-            },
-            {
-              name: '标签管理',
-              path: 'tag',
-              component: 'blog/tag/index',
-              meta: { title: '标签管理', icon: 'tag' },
-            },
-          ],
-        },
-        {
-          name: '消息管理',
-          path: '/news',
-          component: 'Layout',
-          alwaysShow: true,
-          meta: { title: '消息管理', icon: 'message' },
-          children: [
-            {
-              name: '评论管理',
-              path: 'comment',
-              component: 'news/comment/index',
-              meta: { title: '评论管理', icon: 'comment' },
-            },
-            {
-              name: '留言管理',
-              path: 'message',
-              component: 'news/message/index',
-              meta: { title: '留言管理', icon: 'message' },
-            },
-          ],
-        },
-        {
-          name: '系统监控',
-          path: '/monitor',
-          component: 'Layout',
-          alwaysShow: true,
-          meta: { title: '系统监控', icon: 'monitor' },
-          children: [
-            {
-              name: '在线用户',
-              path: 'online',
-              component: 'monitor/online/index',
-              meta: { title: '在线用户', icon: 'online' },
-            },
-            {
-              name: '定时任务',
-              path: 'task',
-              component: 'monitor/task/index',
-              meta: { title: '定时任务', icon: 'job' },
-            },
-          ],
-        },
-      ];
+      // 从数据库获取用户菜单
+      const menus = await this.userService.getUserMenuTree(req.user.id);
+
+      if (!menus || menus.length === 0) {
+        return ResultDto.fail('没有找到菜单数据');
+      }
+
+      // 转换菜单数据为前端路由格式
+      const menuData = menus.map((menu) => this.formatMenuTree(menu));
+
+      // 打印菜单名称，用于调试
+      console.log(
+        '菜单数据示例:',
+        menuData.length > 0 ? `第一个菜单名称: ${menuData[0].name}` : '无菜单数据',
+      );
 
       return ResultDto.success(menuData);
     } catch (error) {
@@ -544,141 +247,28 @@ export class AdminUserController {
   }
 
   /**
-   * 格式化菜单为前端需要的格式
+   * 将数据库菜单格式转换为前端路由格式
    */
-  private formatMenusForFrontend(menus: any[]): any[] {
-    console.log('formatMenusForFrontend - 输入菜单数量:', menus.length);
-    console.log('formatMenusForFrontend - 输入菜单数据:', JSON.stringify(menus));
-
-    // 先找出所有顶级菜单
-    const topMenus = menus.filter((menu) => menu.parentId === 0);
-    console.log('formatMenusForFrontend - 顶级菜单数量:', topMenus.length);
-
-    const result = topMenus.map((menu) => this.formatSingleMenu(menu, menus));
-    console.log('formatMenusForFrontend - 最终返回菜单数量:', result.length);
-    console.log('formatMenusForFrontend - 最终返回菜单结构:', JSON.stringify(result));
-
-    return result;
-  }
-
-  /**
-   * 获取路由路径
-   */
-  private getRouterPath(menu: any): string {
-    // 顶级目录
-    if (menu.parentId === 0 && menu.type === 0) {
-      return `/${menu.path}`;
-    }
-    // 顶级菜单
-    else if (menu.parentId === 0 && menu.type === 1) {
-      return '/';
-    }
-    return menu.path;
-  }
-
-  /**
-   * 获取组件信息
-   */
-  private getComponent(menu: any, allMenus: any[]): any {
-    // 布局组件
-    if (menu.component === 'Layout') {
-      return 'Layout';
-    }
-    // 父级视图组件
-    else if (menu.component === 'ParentView') {
-      return 'ParentView';
-    }
-    // 顶级目录
-    else if (menu.parentId === 0 && menu.type === 0) {
-      return 'Layout';
-    }
-    // 顶级菜单
-    else if (menu.parentId === 0 && menu.type === 1) {
-      return 'Layout';
-    }
-    // 子菜单但是父级是目录
-    else if (menu.parentId !== 0 && this.isParentDirectory(menu.parentId, allMenus)) {
-      return 'ParentView';
-    }
-
-    // 检查组件路径是否标准
-    if (menu.component) {
-      // 处理路径格式，确保前端能正确解析
-      // 1. 系统管理
-      if (menu.component.startsWith('system/')) {
-        return menu.component;
-      }
-      // 2. 博客管理
-      else if (menu.component.startsWith('blog/')) {
-        return menu.component;
-      }
-      // 3. 监控管理
-      else if (menu.component.startsWith('monitor/')) {
-        return menu.component;
-      }
-    }
-
-    return menu.component;
-  }
-
-  /**
-   * 判断父菜单是否为目录
-   */
-  private isParentDirectory(parentId: number, menus: any[]): boolean {
-    const parent = menus.find((menu) => menu.id === parentId);
-    return parent && parent.type === 0;
-  }
-
-  /**
-   * 格式化单个菜单项
-   */
-  private formatSingleMenu(menu: any, allMenus: any[]): any {
-    console.log('格式化菜单项:', menu.name, '类型:', menu.type, '父ID:', menu.parentId);
-
-    // 参照blog-boot项目的格式创建路由对象
+  private formatMenuTree(menu: any): any {
+    // 基本菜单项结构
     const routerItem: any = {
       name: menu.name,
-      path: this.getRouterPath(menu),
-      component: this.getComponent(menu, allMenus),
+      path: menu.parentId === 0 ? `/${menu.path}` : menu.path,
+      component: menu.parentId === 0 ? 'Layout' : menu.component,
       meta: {
         title: menu.name,
         icon: menu.icon,
-        hidden: menu.hidden === 1,
+        hidden: menu.isHidden === 1,
       },
     };
 
-    // 目录类型 (type = 0)
-    if (menu.type === 0) {
-      // 查找子菜单
-      const children = allMenus
-        .filter((item) => item.parentId === menu.id)
-        .map((item) => this.formatSingleMenu(item, allMenus))
-        .filter((item) => item); // 过滤掉null和undefined
-
-      // 如果有子菜单，设置alwaysShow和redirect
-      if (children && children.length > 0) {
-        routerItem.alwaysShow = true;
-        routerItem.redirect = 'noRedirect';
-        routerItem.children = children;
-      }
-    }
-    // 外部菜单 (以http开头的路由)
-    else if (menu.path && menu.path.startsWith('http')) {
-      routerItem.meta.link = menu.path;
-    }
-    // 一级菜单项 (parentId = 0 且 type = 1)
-    else if (menu.parentId === 0 && menu.type === 1) {
-      // 一级菜单不创建子路由，直接使用组件
-      routerItem.meta = {
-        title: menu.name,
-        icon: menu.icon,
-        hidden: menu.hidden === 1,
-      };
-      // 不创建children，直接使用component
-      routerItem.component = menu.component;
+    // 如果有子菜单
+    if (menu.children && menu.children.length > 0) {
+      routerItem.alwaysShow = true;
+      routerItem.redirect = 'noRedirect';
+      routerItem.children = menu.children.map((child) => this.formatMenuTree(child));
     }
 
-    console.log('格式化结果:', routerItem.path, routerItem.component);
     return routerItem;
   }
 }

@@ -1,10 +1,13 @@
-import { Entity, Column, PrimaryColumn } from 'typeorm';
+import { Entity, Column, PrimaryColumn, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('t_article_tag')
 export class ArticleTag {
-  @PrimaryColumn({ name: 'article_id' })
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ name: 'article_id' })
   articleId: number;
 
-  @PrimaryColumn({ name: 'tag_id' })
+  @Column({ name: 'tag_id' })
   tagId: number;
 }

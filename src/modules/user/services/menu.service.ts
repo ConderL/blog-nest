@@ -95,7 +95,7 @@ export class MenuService {
       menuItem.children = [];
 
       // 添加前端路由需要的属性
-      if (item.type === 0) {
+      if (item.type === '0') {
         menuItem.redirect = 'noRedirect';
         menuItem.alwaysShow = true;
       }

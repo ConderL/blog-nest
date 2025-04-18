@@ -1,12 +1,29 @@
-import { CreateDateColumn, UpdateDateColumn, PrimaryGeneratedColumn } from 'typeorm';
+import { PrimaryGeneratedColumn, Column } from 'typeorm';
 
 export abstract class BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  @Column({ name: 'create_time', type: 'datetime', nullable: true })
+  createTime: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  // 设置select: false，防止自动包含此字段
+  @Column({
+    name: 'update_time',
+    type: 'datetime',
+    nullable: true,
+    select: false,
+    insert: false,
+    update: false,
+  })
+  updateTime: Date;
+
+  // 添加getter以保持向后兼容
+  get createdAt(): Date {
+    return this.createTime;
+  }
+
+  get updatedAt(): Date {
+    return this.updateTime;
+  }
 }

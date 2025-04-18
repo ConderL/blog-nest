@@ -9,9 +9,13 @@ import {
 } from './common/exceptions/http.exception.filter';
 import { DataSource } from 'typeorm';
 import { Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
+import * as fs from 'fs';
+import * as express from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const logger = new Logger('Bootstrap');
 
   // 配置全局管道
@@ -29,6 +33,59 @@ async function bootstrap() {
 
   // 配置全局异常过滤器
   app.useGlobalFilters(new AllExceptionsFilter(), new HttpExceptionFilter());
+
+  // 使用Express原生方式提供静态文件
+  app.use(
+    '/uploads',
+    express.static(join(__dirname, '..', 'public', 'uploads'), {
+      index: false,
+      setHeaders: (res, path) => {
+        console.log('提供静态文件:', path);
+        // 设置适当的Content-Type和缓存控制
+        if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+          res.setHeader('Content-Type', 'image/jpeg');
+        } else if (path.endsWith('.png')) {
+          res.setHeader('Content-Type', 'image/png');
+        } else if (path.endsWith('.gif')) {
+          res.setHeader('Content-Type', 'image/gif');
+        } else if (path.endsWith('.webp')) {
+          res.setHeader('Content-Type', 'image/webp');
+        }
+        res.setHeader('Cache-Control', 'public, max-age=2592000'); // 30天
+      },
+    }),
+  );
+
+  // 常规静态文件
+  app.use(
+    express.static(join(__dirname, '..', 'public'), {
+      index: false,
+      setHeaders: (res, path) => {
+        // 为静态文件设置正确的字符集
+        if (path.endsWith('.html')) {
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        } else if (path.endsWith('.css')) {
+          res.setHeader('Content-Type', 'text/css; charset=utf-8');
+        } else if (path.endsWith('.js')) {
+          res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        }
+        // 设置缓存控制
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      },
+    }),
+  );
+
+  // 添加中间件处理预检
+  app.use((req, res, next) => {
+    // 处理404预检
+    if (req.path.startsWith('/uploads/')) {
+      console.log('访问上传文件:', req.path);
+      const fullPath = join(__dirname, '..', 'public', req.path);
+      console.log('映射物理路径:', fullPath);
+      console.log('文件是否存在:', fs.existsSync(fullPath) ? '存在' : '不存在');
+    }
+    next();
+  });
 
   // 配置Swagger
   const options = new DocumentBuilder()

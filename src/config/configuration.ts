@@ -38,11 +38,11 @@ export default () => ({
     },
     // 阿里云OSS配置
     oss: {
-      url: process.env.UPLOAD_OSS_URL || '',
-      endpoint: process.env.UPLOAD_OSS_ENDPOINT || '',
-      bucketName: process.env.UPLOAD_OSS_BUCKET_NAME || '',
-      accessKeyId: process.env.UPLOAD_OSS_ACCESS_KEY_ID || '',
-      accesskeySecret: process.env.UPLOAD_OSS_ACCESS_KEY_SECRET || '',
+      endpoint: process.env.OSS_ENDPOINT || 'https://oss-cn-beijing.aliyuncs.com',
+      region: process.env.OSS_REGION || 'oss-cn-beijing',
+      bucketName: process.env.OSS_BUCKET || 'conder',
+      accessKeyId: process.env.OSS_ACCESS_KEY_ID || '',
+      accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || '',
     },
     // 腾讯云COS配置
     cos: {

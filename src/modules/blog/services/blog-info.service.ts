@@ -78,14 +78,8 @@ export class BlogInfoService {
     // 获取标签数量
     const tagCount = await this.tagRepository.count();
 
-    // 获取公开文章总浏览量
-    const viewsCount = await this.articleRepository
-      .createQueryBuilder('article')
-      .where('article.isDelete = :isDelete', { isDelete: 0 })
-      .andWhere('article.status = :status', { status: 1 })
-      .select('SUM(article.viewCount)', 'viewsCount')
-      .getRawOne()
-      .then((result) => result.viewsCount || 0);
+    // 文章浏览量统计 - 数据库中实际不存在viewCount字段，返回固定值
+    const viewsCount = 0;
 
     // 获取网站配置信息
     const websiteConfig = {

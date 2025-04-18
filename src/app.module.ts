@@ -12,6 +12,7 @@ import { OauthModule } from './modules/oauth/oauth.module';
 import { SearchModule } from './modules/search/search.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { EmailModule } from './modules/email/email.module';
+import { CacheModule } from '@nestjs/cache-manager';
 
 import configuration from './config/configuration';
 
@@ -21,6 +22,11 @@ import configuration from './config/configuration';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
+    }),
+    // 缓存模块
+    CacheModule.register({
+      isGlobal: true, // 全局可用
+      ttl: 60 * 60 * 1000, // 默认缓存1小时
     }),
     // 数据库模块
     TypeOrmModule.forRootAsync({
@@ -35,6 +41,11 @@ import configuration from './config/configuration';
         database: configService.get('database.database', 'blog'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: false,
+        extra: {
+          charset: 'utf8mb4',
+        },
+        charset: 'utf8mb4',
+        collation: 'utf8mb4_unicode_ci',
         // logging: process.env.NODE_ENV !== 'production',
       }),
     }),

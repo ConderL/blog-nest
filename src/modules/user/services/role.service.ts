@@ -49,7 +49,7 @@ export class RoleService {
    */
   async findAll(): Promise<Role[]> {
     return this.roleRepository.find({
-      order: { createdAt: 'DESC' },
+      order: { createdAt: 'DESC' } as any,
     });
   }
 

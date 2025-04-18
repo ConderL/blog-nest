@@ -8,6 +8,9 @@ export class TransformInterceptor<T> implements NestInterceptor<T, ResultDto<T>>
   intercept(context: ExecutionContext, next: CallHandler): Observable<ResultDto<T>> {
     return next.handle().pipe(
       map((data) => {
+        const response = context.switchToHttp().getResponse();
+        response.header('Content-Type', 'application/json; charset=utf-8');
+
         // 如果响应已经是ResultDto格式，直接返回
         if (data && data.flag !== undefined && data.code !== undefined && data.msg !== undefined) {
           return data;

@@ -62,7 +62,7 @@ export class TaskService {
 
     const visits = await this.visitLogRepository.count({
       where: {
-        createdAt: Between(hourAgo, now),
+        createdAt: Between(hourAgo, now) as any,
       },
     });
 
@@ -79,7 +79,7 @@ export class TaskService {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const result = await this.visitLogRepository.delete({
-      createdAt: LessThan(thirtyDaysAgo),
+      createdAt: LessThan(thirtyDaysAgo) as any,
     });
 
     this.logger.log(`已清理 ${result.affected || 0} 条过期访问日志`);
@@ -147,7 +147,7 @@ export class TaskService {
 
     const todayVisits = await this.visitLogRepository.count({
       where: {
-        createdAt: Between(today, new Date()),
+        createdAt: Between(today, new Date()) as any,
       },
     });
 
@@ -177,7 +177,7 @@ export class TaskService {
 
       const count = await this.visitLogRepository.count({
         where: {
-          createdAt: Between(date.toDate(), nextDate.toDate()),
+          createdAt: Between(date.toDate(), nextDate.toDate()) as any,
         },
       });
 
@@ -288,7 +288,7 @@ export class TaskService {
 
       const count = await this.visitLogRepository.count({
         where: {
-          createdAt: Between(current.toDate(), nextDay.toDate()),
+          createdAt: Between(current.toDate(), nextDay.toDate()) as any,
         },
       });
 
@@ -404,7 +404,7 @@ export class TaskService {
 
       const count = await this.articleRepository.count({
         where: {
-          createdAt: Between(startDate, endDate),
+          createdAt: Between(startDate, endDate) as any,
           isDelete: 0,
         },
       });

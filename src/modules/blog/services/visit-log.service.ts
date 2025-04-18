@@ -31,7 +31,7 @@ export class VisitLogService {
       referer: visitLog.referer || '',
       userId: visitLog.userId || null,
     });
-    
+
     return await this.visitLogRepository.save(newVisitLog);
   }
 
@@ -44,11 +44,14 @@ export class VisitLogService {
     const startOfDay = moment(today).startOf('day').toDate();
     const endOfDay = moment(today).endOf('day').toDate();
 
-    return await this.visitLogRepository.count({
-      where: {
-        createdAt: Between(startOfDay, endOfDay),
-      },
-    });
+    // 使用查询构建器以避免列名映射问题
+    return await this.visitLogRepository
+      .createQueryBuilder('visit')
+      .where('visit.create_time BETWEEN :startOfDay AND :endOfDay', {
+        startOfDay,
+        endOfDay,
+      })
+      .getCount();
   }
 
   /**
@@ -70,9 +73,9 @@ export class VisitLogService {
     // 查询最近七天的访问记录
     const visits = await this.visitLogRepository
       .createQueryBuilder('visit')
-      .select("DATE_FORMAT(visit.createdAt, '%Y-%m-%d')", 'date')
+      .select("DATE_FORMAT(visit.create_time, '%Y-%m-%d')", 'date')
       .addSelect('COUNT(visit.id)', 'count')
-      .where('visit.createdAt >= :sevenDaysAgo', { sevenDaysAgo })
+      .where('visit.create_time >= :sevenDaysAgo', { sevenDaysAgo })
       .groupBy('date')
       .orderBy('date', 'ASC')
       .getRawMany();
@@ -156,7 +159,7 @@ export class VisitLogService {
     await this.visitLogRepository
       .createQueryBuilder()
       .delete()
-      .where('createdAt < :cutoffDate', { cutoffDate })
+      .where('create_time < :cutoffDate', { cutoffDate })
       .execute();
   }
 }

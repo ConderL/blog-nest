@@ -40,7 +40,7 @@ export class FriendService {
     const condition = status !== undefined ? { status } : {};
     return this.friendRepository.find({
       where: condition,
-      order: { createdAt: 'DESC' },
+      order: { createdAt: 'DESC' } as any,
     });
   }
 

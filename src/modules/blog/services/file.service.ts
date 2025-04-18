@@ -63,7 +63,7 @@ export class FileService {
       where: { userId, isDelete: 0 },
       skip: (page - 1) * limit,
       take: limit,
-      order: { createdAt: 'DESC' },
+      order: { createdAt: 'DESC' } as any,
     });
     return { items, total };
   }

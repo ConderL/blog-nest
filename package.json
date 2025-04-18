@@ -36,6 +36,7 @@
   "dependencies": {
     "@elastic/elasticsearch": "^9.0.0",
     "@nestjs/bull": "^11.0.2",
+    "@nestjs/cache-manager": "^2.2.2",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.3.0",
     "@nestjs/core": "^10.0.0",
@@ -54,6 +55,7 @@
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
     "bull": "^4.16.5",
+    "cache-manager": "^5.5.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "dayjs": "^1.11.13",

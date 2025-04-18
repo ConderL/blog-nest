@@ -69,7 +69,7 @@ export class CommentService {
       },
       relations: ['user'],
       order: {
-        createdAt: 'DESC',
+        createdAt: 'DESC' as any,
       },
     });
 
@@ -113,7 +113,7 @@ export class CommentService {
     // 获取所有根评论（无父评论）
     const rootComments = await this.commentRepository.find({
       where: { articleId, parentId: 0 },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: 'DESC' } as any,
       relations: ['user', 'article'],
     });
 

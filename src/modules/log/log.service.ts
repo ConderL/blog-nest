@@ -189,7 +189,7 @@ export class LogService {
     try {
       const cutoffDate = moment().subtract(days, 'days').toDate();
       const result = await this.visitLogRepository.delete({
-        createdAt: LessThan(cutoffDate),
+        createdAt: LessThan(cutoffDate) as any,
       });
 
       return result.affected || 0;
@@ -204,7 +204,7 @@ export class LogService {
    */
   async getRecentVisits(limit: number = 10): Promise<VisitLog[]> {
     return this.visitLogRepository.find({
-      order: { createdAt: 'DESC' },
+      order: { createdAt: 'DESC' } as any,
       take: limit,
     });
   }
@@ -214,7 +214,7 @@ export class LogService {
    */
   async getRecentOperations(limit: number = 10): Promise<OperationLog[]> {
     return this.operationLogRepository.find({
-      order: { createdAt: 'DESC' },
+      order: { createdAt: 'DESC' } as any,
       take: limit,
     });
   }
@@ -225,7 +225,7 @@ export class LogService {
   async countVisits(startDate: Date, endDate: Date): Promise<number> {
     return this.visitLogRepository.count({
       where: {
-        createdAt: Between(startDate, endDate),
+        createdAt: Between(startDate, endDate) as any,
       },
     });
   }

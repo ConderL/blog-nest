@@ -235,29 +235,55 @@ export class AuthService {
           remark: '系统管理员',
           isDisable: 0,
           createTime: new Date(),
-          updateTime: new Date()
+          updateTime: new Date(),
         } as any);
       }
 
       // 获取用户权限列表
       const permissionList = await this.userService.getUserPermissions(user.id);
       this.logger.log(`获取到用户权限: ${JSON.stringify(permissionList)}`);
-      
+
       // 如果permissionList为空，且用户名为admin，则添加所有权限
       if ((permissionList.length === 0 || !permissionList) && user.username === 'admin') {
         this.logger.log('用户没有权限，但用户名为admin，添加所有权限');
         // 添加常用权限
         const allPermissions = [
-          'system:user:list', 'system:user:add', 'system:user:update', 'system:user:delete', 'system:user:status',
-          'system:role:list', 'system:role:add', 'system:role:update', 'system:role:delete', 'system:role:status',
-          'system:menu:list', 'system:menu:add', 'system:menu:update', 'system:menu:delete',
-          'monitor:online:list', 'monitor:online:kick',
-          'article:list', 'article:add', 'article:update', 'article:delete', 'article:status',
-          'category:list', 'category:add', 'category:update', 'category:delete',
-          'tag:list', 'tag:add', 'tag:update', 'tag:delete'
+          'system:user:list',
+          'system:user:add',
+          'system:user:update',
+          'system:user:delete',
+          'system:user:status',
+          'system:role:list',
+          'system:role:add',
+          'system:role:update',
+          'system:role:delete',
+          'system:role:status',
+          'system:menu:list',
+          'system:menu:add',
+          'system:menu:update',
+          'system:menu:delete',
+          'monitor:online:list',
+          'monitor:online:kick',
+          'article:list',
+          'article:add',
+          'article:update',
+          'article:delete',
+          'article:status',
+          'category:list',
+          'category:add',
+          'category:update',
+          'category:delete',
+          'tag:list',
+          'tag:add',
+          'tag:update',
+          'tag:delete',
         ];
-        allPermissions.forEach(p => permissionList.push(p));
+        allPermissions.forEach((p) => permissionList.push(p));
       }
+
+      // 获取用户菜单树
+      const menuList = await this.userService.getUserMenuTree(user.id);
+      this.logger.log(`获取到用户菜单树，根节点数量: ${menuList.length}`);
 
       // 生成JWT令牌
       const payload = { username: user.username, sub: user.id };
@@ -270,9 +296,10 @@ export class AuthService {
         username: user.username,
         nickname: user.nickname || user.username,
         avatar: user.avatar || '',
-        roleList: roleList.map(role => role.roleLabel || role.id),
+        roleList: roleList.map((role) => role.roleLabel || role.id),
         permissionList: permissionList,
-        token: token
+        menuList: menuList,
+        token: token,
       };
 
       this.logger.log(`管理员登录成功: ${user.username}`);

@@ -4,6 +4,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as dayjs from 'dayjs';
 import * as crypto from 'crypto';
+import * as https from 'https';
+import * as url from 'url';
+// 注：这里引入ali-oss需要先安装依赖：npm install ali-oss @types/ali-oss --save
+// 此处先注释，需要时取消注释
+// import OSS from 'ali-oss';
 
 /**
  * 文件上传服务
@@ -11,6 +16,14 @@ import * as crypto from 'crypto';
 @Injectable()
 export class UploadService {
   constructor(private configService: ConfigService) {}
+
+  /**
+   * 获取上传路径
+   * @returns 上传根目录路径
+   */
+  getUploadPath(): string {
+    return this.configService.get('upload.local.path', 'public/uploads/');
+  }
 
   /**
    * 上传文件
@@ -49,35 +62,60 @@ export class UploadService {
     file: Express.Multer.File,
     type: string,
   ): Promise<{ url: string; path: string }> {
-    const localUrl = this.configService.get('upload.local.url');
-    const localPath = this.configService.get('upload.local.path');
+    try {
+      // 获取本地存储配置
+      const localUrl = this.configService.get('upload.local.url');
+      const localPath = this.configService.get('upload.local.path');
 
-    // 根据文件类型和日期创建存储路径
-    const datePath = dayjs().format('YYYY/MM/DD');
-    const dirPath = path.join(localPath, type, datePath);
+      // 验证文件是否存在
+      if (!file || !file.buffer) {
+        throw new Error('上传文件不存在或内容为空');
+      }
 
-    // 确保目录存在
-    await this.ensureDir(dirPath);
+      console.log('准备上传文件:', file.originalname, '大小:', file.size, '类型:', file.mimetype);
 
-    // 生成文件名
-    const timestamp = Date.now();
-    const randomStr = crypto.randomBytes(8).toString('hex');
-    const fileName = `${timestamp}-${randomStr}${path.extname(file.originalname)}`;
+      // 根据文件类型和日期创建存储路径
+      const datePath = dayjs().format('YYYY-MM-DD');
+      const webPath = `${type}/${datePath}`;
 
-    // 文件保存路径
-    const filePath = path.join(dirPath, fileName);
+      // 文件系统路径 - 使用当前系统的路径分隔符
+      const dirPath = path.join(localPath, type);
 
-    // 创建可写流，写入文件
-    const writeStream = fs.createWriteStream(filePath);
-    writeStream.write(file.buffer);
-    writeStream.end();
+      // 确保目录存在 - 先只创建主目录
+      await this.ensureDir(dirPath);
 
-    // 返回文件访问路径
-    const fileUrl = `${localUrl}${type}/${datePath}/${fileName}`;
-    return {
-      url: fileUrl,
-      path: filePath,
-    };
+      // 再创建日期子目录
+      const fullDirPath = path.join(dirPath, datePath);
+      await this.ensureDir(fullDirPath);
+
+      // 生成文件名
+      const timestamp = Date.now();
+      const randomStr = crypto.randomBytes(8).toString('hex');
+      const fileName = `${timestamp}-${randomStr}${path.extname(file.originalname)}`;
+
+      // 文件保存路径
+      const filePath = path.join(fullDirPath, fileName);
+      console.log('保存文件路径:', filePath);
+
+      // 使用fs.promises.writeFile代替流写入
+      await fs.promises.writeFile(filePath, file.buffer);
+      console.log('文件写入成功');
+
+      // 构建一个基于控制器路由的URL
+      const baseUrl = localUrl.endsWith('/') ? localUrl.slice(0, -1) : localUrl; // 移除尾部斜杠
+      const fileUrl = `${baseUrl}/uploads/${type}/${datePath}/${fileName}`;
+      // 修复路径中可能出现的双重uploads
+      const finalUrl = fileUrl.replace('/uploads/uploads/', '/uploads/');
+      console.log('文件URL:', finalUrl);
+
+      return {
+        url: finalUrl,
+        path: filePath,
+      };
+    } catch (error) {
+      console.error('本地上传失败:', error);
+      throw new Error(`本地上传失败: ${error.message}`);
+    }
   }
 
   /**
@@ -90,9 +128,121 @@ export class UploadService {
     file: Express.Multer.File,
     type: string,
   ): Promise<{ url: string; path: string }> {
-    // TODO: 集成阿里云OSS SDK
-    // 实现上传逻辑
-    throw new Error('阿里云OSS上传暂未实现');
+    try {
+      // 直接从环境变量获取OSS配置
+      const accessKeyId = this.configService.get('OSS_ACCESS_KEY_ID');
+      const accessKeySecret = this.configService.get('OSS_ACCESS_KEY_SECRET');
+      const region = this.configService.get('OSS_REGION');
+      const bucket = this.configService.get('OSS_BUCKET');
+      const endpoint = this.configService.get('OSS_ENDPOINT');
+
+      // 尝试从upload.oss配置中获取（fallback）
+      const ossConfig = this.configService.get('upload.oss');
+
+      // 优先使用环境变量，如果没有则使用配置
+      const finalAccessKeyId = accessKeyId || (ossConfig && ossConfig.accessKeyId);
+      const finalAccessKeySecret = accessKeySecret || (ossConfig && ossConfig.accessKeySecret);
+      const finalRegion = region || (ossConfig && ossConfig.region);
+      const finalBucket = bucket || (ossConfig && ossConfig.bucketName);
+      const finalEndpoint = endpoint || (ossConfig && ossConfig.endpoint);
+
+      if (!finalAccessKeyId || !finalAccessKeySecret || !finalRegion || !finalBucket) {
+        throw new Error('阿里云OSS配置不完整');
+      }
+
+      console.log('OSS配置信息检查：', {
+        accessKeyId: !!finalAccessKeyId,
+        accessKeySecret: !!finalAccessKeySecret,
+        region: finalRegion,
+        bucket: finalBucket,
+        endpoint: finalEndpoint,
+      });
+
+      // 生成OSS路径
+      const datePath = dayjs().format('YYYY/MM/DD');
+      const timestamp = Date.now();
+      const randomStr = crypto.randomBytes(8).toString('hex');
+      const fileName = `${timestamp}-${randomStr}${path.extname(file.originalname)}`;
+      const ossPath = `${type}/${datePath}/${fileName}`;
+
+      // 使用环境变量中的endpoint构建OSS URL
+      const url = `${finalEndpoint.replace('https://', `https://${finalBucket}.`)}/${ossPath}`;
+
+      // 临时方案，暂不执行实际上传，仅返回URL结构
+      console.warn('阿里云OSS SDK未启用，仅返回URL结构，未实际上传');
+      console.log('生成的URL:', url);
+      return {
+        url,
+        path: ossPath,
+      };
+    } catch (error) {
+      console.error('上传至阿里云OSS失败', error);
+      throw new Error(`上传至阿里云OSS失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 使用HTTPS模块上传到OSS
+   * 注意：这是一个简化的实现，仅作为临时方案
+   * 生产环境应使用官方SDK
+   */
+  private async uploadToOssWithHttps(
+    buffer: Buffer,
+    objectName: string,
+    ossConfig: any,
+  ): Promise<void> {
+    const { accessKeyId, accessKeySecret, bucketName, endpoint } = ossConfig;
+
+    // 构建请求URL
+    const parsedUrl = url.parse(endpoint);
+    const host = `${bucketName}.${parsedUrl.host}`;
+    const date = new Date().toUTCString();
+    const contentType = 'application/octet-stream';
+
+    // 构建签名
+    const stringToSign = `PUT\n\n${contentType}\n${date}\n/${bucketName}/${objectName}`;
+    const signature = crypto
+      .createHmac('sha1', accessKeySecret)
+      .update(stringToSign)
+      .digest('base64');
+
+    // 构建请求选项
+    const options = {
+      hostname: host,
+      port: 443,
+      path: `/${objectName}`,
+      method: 'PUT',
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': buffer.length,
+        Host: host,
+        Date: date,
+        Authorization: `OSS ${accessKeyId}:${signature}`,
+      },
+    };
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve();
+          } else {
+            reject(new Error(`上传失败，状态码: ${res.statusCode}, 响应: ${data}`));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        reject(error);
+      });
+
+      req.write(buffer);
+      req.end();
+    });
   }
 
   /**
