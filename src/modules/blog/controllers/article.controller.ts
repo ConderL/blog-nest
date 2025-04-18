@@ -12,6 +12,8 @@ import {
   Put,
   UploadedFile,
   UseInterceptors,
+  Res,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -44,6 +46,7 @@ import { Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { CommentService } from '../services/comment.service';
+import { Response } from 'express';
 
 // 前台文章控制器
 @ApiTags('文章')
@@ -277,80 +280,88 @@ export class AdminArticleController {
   @Put('update')
   @ApiOperation({ summary: '修改文章' })
   @OperationLog(OperationType.UPDATE)
-  async updateArticle(@Body() articleData: any): Promise<ResultDto<Article>> {
+  async updateArticle(@Body() updateArticleDto: UpdateArticleDto, @Res() res: Response) {
+    console.log('=========== 接收到更新请求 ===========');
+    console.log('文章ID:', updateArticleDto.id);
+    console.log('文章标题:', updateArticleDto.title);
+    console.log('文章内容长度:', updateArticleDto.content?.length);
+    console.log('文章内容预览:', updateArticleDto.content?.substring(0, 100) + '...');
+    console.log('分类ID:', updateArticleDto.categoryId);
+    console.log('标签名列表:', updateArticleDto.tagNameList);
+
     try {
-      // 从前端接收的数据字段映射到后端DTO格式
-      const updateArticleDto: UpdateArticleDto = {
-        id: articleData.id,
-        title: articleData.articleTitle,
-        content: articleData.articleContent,
-        description: articleData.articleDesc,
-        cover: articleData.articleCover,
-        categoryId: null, // 稍后根据categoryName获取
-        isTop: articleData.isTop === 1,
-        isPublish: articleData.status !== 3, // 如果status不是3(草稿)，则为发布状态
-        isOriginal: articleData.articleType === 1,
-        originalUrl: articleData.articleType !== 1 ? articleData.originalUrl : undefined,
-      };
-
-      // 1. 根据分类名称获取分类ID
-      let categoryId = null;
-      if (articleData.categoryName) {
-        // 由于CategoryService没有直接通过名称查询的方法，我们直接使用Repository
-        const existingCategory = await this.categoryRepository.findOne({
-          where: { categoryName: articleData.categoryName },
-        });
-
-        if (existingCategory) {
-          categoryId = existingCategory.id;
-        } else {
-          // 如果分类不存在，创建新分类
-          const newCategory = await this.categoryService.create({
-            categoryName: articleData.categoryName,
-          });
-          categoryId = newCategory.id;
-        }
-        updateArticleDto.categoryId = categoryId;
-      }
-
-      // 2. 根据标签名称列表获取标签ID列表
-      let tagIds = [];
-      if (articleData.tagNameList && articleData.tagNameList.length > 0) {
-        // 查询数据库中已存在的标签
-        for (const tagName of articleData.tagNameList) {
-          // 查找或创建标签
-          const tag = await this.tagService.findOrCreate(tagName);
-          tagIds.push(tag.id);
-        }
-      }
-
-      // 将原始数据转换为实体对象，只包含实际存在于数据库中的字段
-      const article: Partial<Article> = {
+      // 准备用于更新的文章数据
+      const updateData: Partial<Article> = {
+        id: updateArticleDto.id,
         articleTitle: updateArticleDto.title,
         articleContent: updateArticleDto.content,
-        articleDesc: updateArticleDto.description || '',
-        articleCover: updateArticleDto.cover || '',
-        categoryId: categoryId,
-        articleType: articleData.articleType,
+        articleDesc: updateArticleDto.description,
+        articleCover: updateArticleDto.cover,
+        categoryId: updateArticleDto.categoryId,
+        articleType: updateArticleDto.isOriginal ? 1 : 2, // 1-原创 2-转载
         isTop: updateArticleDto.isTop ? 1 : 0,
-        isRecommend: articleData.isRecommend,
+        isRecommend: 0, // 默认不推荐
         status: updateArticleDto.isPublish ? 1 : 3, // 1-公开 3-草稿
-        updateTime: new Date(), // 显式设置更新时间
+        updateTime: new Date(),
       };
 
-      // 更新文章
-      const result = await this.articleService.update(articleData.id, article, tagIds);
-      return ResultDto.success(result);
+      // 处理标签
+      let tagIds = [];
+      if (updateArticleDto.tagIds && Array.isArray(updateArticleDto.tagIds)) {
+        tagIds = updateArticleDto.tagIds;
+      } else if (updateArticleDto.tagNameList && Array.isArray(updateArticleDto.tagNameList)) {
+        // 如果提供了标签名称列表，则查找或创建标签
+        const tagPromises = updateArticleDto.tagNameList.map((tagName) =>
+          this.tagService.findOrCreate(tagName),
+        );
+        const tags = await Promise.all(tagPromises);
+        tagIds = tags.map((tag) => tag.id);
+      }
+
+      console.log('准备更新的标签IDs:', tagIds);
+      console.log(
+        '准备更新的文章数据:',
+        JSON.stringify({
+          ...updateData,
+          articleContent: '(内容过长已省略)',
+        }),
+      );
+
+      // 调用服务更新文章
+      await this.articleService.update(updateData.id, updateData, tagIds);
+      console.log('更新结果: 成功');
+
+      // 简化的响应，只返回成功消息
+      return res.status(HttpStatus.OK).json({
+        code: 200,
+        flag: true,
+        msg: '更新成功',
+        data: '更新成功',
+      });
     } catch (error) {
-      console.error('更新文章失败:', error);
-      return ResultDto.error(`更新文章失败: ${error.message}`);
+      console.error('更新文章时出错:', error);
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        code: 500,
+        flag: false,
+        msg: '更新失败: ' + error.message,
+        data: null,
+      });
     }
   }
 
   @Get('edit/:id')
   @ApiOperation({ summary: '编辑文章' })
-  async editArticle(@Param('id') id: string): Promise<ResultDto<Article>> {
-    const result = await this.articleService.findById(+id);
+  async editArticle(@Param('id') id: string): Promise<ResultDto<any>> {
+    const article = await this.articleService.findById(+id);
+
+    // 创建一个新对象以返回自定义结构
+    const result = {
+      ...article,
+      // 添加tagNameList字段，只包含标签名称
+      tagNameList: article.tags ? article.tags.map((tag) => tag.tagName) : [],
+      categoryName: article.category ? article.category.categoryName : '',
+    };
+
     return ResultDto.success(result);
   }
 

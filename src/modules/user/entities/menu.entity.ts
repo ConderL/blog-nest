@@ -22,11 +22,10 @@ export class Menu extends BaseEntity {
   orderNum: number;
 
   @Column({ name: 'is_hidden', type: 'tinyint', default: 0 })
-  hidden: boolean;
+  hidden: number;
 
-  // 添加别名属性，确保与前端API兼容
   get isHidden(): number {
-    return this.hidden ? 1 : 0;
+    return this.hidden;
   }
 
   @Column({ name: 'menu_type', type: 'char', length: 1 })

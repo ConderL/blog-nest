@@ -243,6 +243,7 @@ export class UserService {
     console.log('UserService.getUserMenuTree - 菜单IDs数量:', menuIds.length);
 
     // 查询菜单信息 - 只查询类型为M(目录)和C(菜单)的项，排除F(按钮)类型
+    // 并且排除is_hidden=1的菜单项
     const menus = await this.menuRepository.find({
       where: {
         id: In(menuIds),

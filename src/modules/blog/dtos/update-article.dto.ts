@@ -36,6 +36,11 @@ export class UpdateArticleDto {
   @IsArray()
   tagIds?: number[];
 
+  @ApiProperty({ description: '标签名称列表', required: false })
+  @IsOptional()
+  @IsArray()
+  tagNameList?: string[];
+
   @ApiProperty({ description: '是否原创', default: true })
   @IsOptional()
   @IsBoolean()

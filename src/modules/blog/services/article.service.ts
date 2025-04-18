@@ -122,6 +122,10 @@ export class ArticleService {
    * 更新文章
    */
   async update(id: number, article: Partial<Article>, tagIds: number[] = []): Promise<Article> {
+    console.log(
+      `执行文章更新, ID: ${id}, 内容前30个字符: ${article.articleContent?.substring(0, 30)}...`,
+    );
+
     const existingArticle = await this.articleRepository.findOne({
       where: { id },
       relations: ['tags'],
@@ -131,17 +135,42 @@ export class ArticleService {
       throw new NotFoundException(`文章ID ${id} 不存在`);
     }
 
-    // 更新文章基本信息
-    await this.articleRepository.update(id, article);
+    console.log(`现有文章内容前30个字符: ${existingArticle.articleContent?.substring(0, 30)}...`);
 
-    // 如果有标签，重新关联标签
-    if (tagIds.length > 0) {
-      const tags = await this.tagRepository.findBy({ id: In(tagIds) });
-      existingArticle.tags = tags;
-      await this.articleRepository.save(existingArticle);
+    try {
+      // 合并文章对象并保存，使用save而不是update以确保完整更新
+      const mergedArticle = this.articleRepository.merge(existingArticle, article);
+      console.log(`合并后文章内容前30个字符: ${mergedArticle.articleContent?.substring(0, 30)}...`);
+
+      // 保存文章基本信息
+      await this.articleRepository.save(mergedArticle);
+      console.log(`文章基本信息已保存`);
+
+      // 如果有标签，重新关联标签
+      if (tagIds.length > 0) {
+        console.log(`更新文章标签，标签ID数量: ${tagIds.length}`);
+        const tags = await this.tagRepository.findBy({ id: In(tagIds) });
+
+        // 重新查询文章以获取最新版本
+        const updatedArticle = await this.articleRepository.findOne({
+          where: { id },
+          relations: ['tags'],
+        });
+
+        updatedArticle.tags = tags;
+        await this.articleRepository.save(updatedArticle);
+        console.log(`文章标签已更新`);
+      }
+
+      // 查询更新后的文章
+      const result = await this.findById(id);
+      console.log(`更新后文章内容前30个字符: ${result.articleContent?.substring(0, 30)}...`);
+
+      return result;
+    } catch (error) {
+      console.error(`更新文章失败:`, error);
+      throw error;
     }
-
-    return this.findById(id);
   }
 
   /**

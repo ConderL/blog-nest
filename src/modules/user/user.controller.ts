@@ -106,6 +106,9 @@ export class UserController {
    * 将数据库菜单格式转换为前端路由格式
    */
   private formatMenuTree(menu: any): any {
+    // 添加调试日志
+    console.log(`格式化菜单: ${menu.name} (ID=${menu.id}), is_hidden=${menu.hidden}`);
+
     // 基本菜单项结构
     const routerItem: any = {
       name: menu.name,
@@ -114,7 +117,8 @@ export class UserController {
       meta: {
         title: menu.name,
         icon: menu.icon,
-        hidden: menu.isHidden === 1,
+        // 直接使用数据库原始值确定是否隐藏
+        hidden: menu.hidden === true,
       },
     };
 
@@ -250,6 +254,9 @@ export class AdminUserController {
    * 将数据库菜单格式转换为前端路由格式
    */
   private formatMenuTree(menu: any): any {
+    // 添加调试日志
+    console.log(`格式化菜单: ${menu.name} (ID=${menu.id}), is_hidden=${menu.hidden}`);
+
     // 基本菜单项结构
     const routerItem: any = {
       name: menu.name,
@@ -258,7 +265,8 @@ export class AdminUserController {
       meta: {
         title: menu.name,
         icon: menu.icon,
-        hidden: menu.isHidden === 1,
+        // 直接使用数据库原始值确定是否隐藏
+        hidden: menu.hidden === true,
       },
     };
 
