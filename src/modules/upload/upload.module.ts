@@ -1,4 +1,5 @@
 import { Module, OnModuleInit } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { UploadService } from './services/upload/upload.service';
 import { UploadController } from './controllers/upload/upload.controller';
 import { FilesController } from './controllers/files.controller';
@@ -7,6 +8,7 @@ import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
+import { UploadFileEntity } from './entities/file.entity';
 
 @Module({
   imports: [
@@ -17,6 +19,7 @@ import * as fs from 'fs';
         fileSize: 20 * 1024 * 1024,
       },
     }),
+    TypeOrmModule.forFeature([UploadFileEntity]),
   ],
   controllers: [UploadController, FilesController],
   providers: [UploadService],

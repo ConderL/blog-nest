@@ -122,6 +122,7 @@ export class UploadController {
           alt: file.originalname,
           href: result.url,
           size: file.size,
+          fileSize: file.size,
           type: file.mimetype,
         },
       };
@@ -217,7 +218,10 @@ export class UploadController {
           url: result.url,
           name: file.originalname,
           originalName: file.originalname,
+          alt: file.originalname,
+          href: result.url,
           size: file.size,
+          fileSize: file.size,
           type: file.mimetype,
         },
       };
@@ -322,7 +326,10 @@ export class UploadController {
           url: result.url,
           name: file.originalname,
           originalName: file.originalname,
+          alt: file.originalname,
+          href: result.url,
           size: file.size,
+          fileSize: file.size,
           type: file.mimetype,
         },
       };

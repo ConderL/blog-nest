@@ -29,20 +29,18 @@ export default () => ({
   },
   // 文件上传配置
   upload: {
-    // 存储策略: local、oss、cos、qiniu
     strategy: process.env.UPLOAD_STRATEGY || 'local',
-    // 本地存储配置
     local: {
-      url: process.env.UPLOAD_LOCAL_URL || 'http://localhost:3000/uploads/',
       path: process.env.UPLOAD_LOCAL_PATH || 'public/uploads/',
+      url: process.env.UPLOAD_LOCAL_URL || 'http://localhost:3300/',
     },
-    // 阿里云OSS配置
     oss: {
-      endpoint: process.env.OSS_ENDPOINT || 'https://oss-cn-beijing.aliyuncs.com',
-      region: process.env.OSS_REGION || 'oss-cn-beijing',
-      bucketName: process.env.OSS_BUCKET || 'conder',
       accessKeyId: process.env.OSS_ACCESS_KEY_ID || '',
       accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || '',
+      region: process.env.OSS_REGION || 'oss-cn-hangzhou',
+      bucketName: process.env.OSS_BUCKET || '',
+      endpoint: process.env.OSS_ENDPOINT || 'oss-cn-hangzhou.aliyuncs.com',
+      cdnUrl: process.env.OSS_CDN_URL || '',
     },
     // 腾讯云COS配置
     cos: {

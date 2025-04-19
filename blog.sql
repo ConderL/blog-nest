@@ -823,4 +823,19 @@ CREATE TABLE `t_visit_log`  (
 -- Records of t_visit_log
 -- ----------------------------
 
+-- ----------------------------
+-- Table structure for t_upload_file
+-- ----------------------------
+DROP TABLE IF EXISTS `t_upload_file`;
+CREATE TABLE `t_upload_file`  (
+  `id` int(0) NOT NULL AUTO_INCREMENT COMMENT '文件ID',
+  `file_md5` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '文件MD5值',
+  `url` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '访问URL',
+  `path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '存储路径',
+  `file_size` int(0) NOT NULL DEFAULT 0 COMMENT '文件大小（字节）',
+  `create_time` datetime(0) NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_file_md5` (`file_md5`) USING BTREE COMMENT 'MD5唯一索引'
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '上传文件记录表' ROW_FORMAT = Dynamic;
+
 SET FOREIGN_KEY_CHECKS = 1;

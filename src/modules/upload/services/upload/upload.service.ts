@@ -1,21 +1,71 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as fs from 'fs';
-import * as path from 'path';
 import * as dayjs from 'dayjs';
 import * as crypto from 'crypto';
 import * as https from 'https';
 import * as url from 'url';
+// 取消注释，启用阿里云OSS SDK
+// import * as OSS from 'ali-oss';
 // 注：这里引入ali-oss需要先安装依赖：npm install ali-oss @types/ali-oss --save
 // 此处先注释，需要时取消注释
 // import OSS from 'ali-oss';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { resolve, join, extname } from 'path';
+import { customAlphabet } from 'nanoid';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { UploadFileEntity } from '../../entities/file.entity';
+// 导入ali-oss
+import * as AliOSS from 'ali-oss';
 
 /**
  * 文件上传服务
  */
 @Injectable()
 export class UploadService {
-  constructor(private configService: ConfigService) {}
+  private readonly logger = new Logger(UploadService.name);
+  private readonly strategy: string;
+  private readonly localPath: string;
+  private readonly localUrl: string;
+  private readonly ossCdnUrl: string;
+  private readonly DATE_FORMAT = 'YYYY/MM'; // 只保留年月
+  // OSS配置
+  private readonly ossConfig: {
+    accessKeyId: string;
+    accessKeySecret: string;
+    region: string;
+    bucketName: string;
+    endpoint: string;
+  };
+
+  constructor(
+    private readonly configService: ConfigService,
+    @InjectRepository(UploadFileEntity)
+    private readonly fileRepository: Repository<UploadFileEntity>,
+  ) {
+    // 获取上传配置
+    this.strategy = this.configService.get<string>('upload.strategy');
+    this.localPath = this.configService.get<string>('upload.local.path');
+    this.localUrl = this.configService.get<string>('upload.local.url');
+    this.ossCdnUrl = this.configService.get<string>('upload.oss.cdnUrl');
+
+    // 获取OSS配置
+    this.ossConfig = {
+      accessKeyId: this.configService.get<string>('upload.oss.accessKeyId'),
+      accessKeySecret: this.configService.get<string>('upload.oss.accessKeySecret'),
+      region: this.configService.get<string>('upload.oss.region'),
+      bucketName: this.configService.get<string>('upload.oss.bucketName'),
+      endpoint: this.configService.get<string>('upload.oss.endpoint'),
+    };
+
+    this.logger.log(`当前上传策略: ${this.strategy}`);
+    this.logger.log(`CDN URL: ${this.ossCdnUrl || '未配置'}`);
+  }
+
+  // 计算文件MD5
+  private calculateMd5(buffer: Buffer): string {
+    return crypto.createHash('md5').update(buffer).digest('hex');
+  }
 
   /**
    * 获取上传路径
@@ -35,20 +85,56 @@ export class UploadService {
     file: Express.Multer.File,
     type = 'image',
   ): Promise<{ url: string; path: string }> {
-    const strategy = this.configService.get('upload.strategy', 'local');
+    try {
+      // 计算文件MD5
+      const fileMd5 = this.calculateMd5(file.buffer);
+      this.logger.log(`文件MD5值: ${fileMd5}`);
 
-    // 根据策略选择不同的上传方法
-    switch (strategy) {
-      case 'local':
-        return this.uploadToLocal(file, type);
-      case 'oss':
-        return this.uploadToOSS(file, type);
-      case 'cos':
-        return this.uploadToCOS(file, type);
-      case 'qiniu':
-        return this.uploadToQiniu(file, type);
-      default:
-        return this.uploadToLocal(file, type);
+      // 检查是否已存在相同文件
+      const existingFile = await this.fileRepository.findOne({ where: { fileMd5 } });
+      if (existingFile) {
+        this.logger.log(`找到重复文件，直接返回: ${existingFile.url}`);
+        return {
+          url: existingFile.url,
+          path: existingFile.path,
+        };
+      }
+
+      this.logger.log(`文件上传策略: ${this.strategy}`);
+
+      // 根据不同策略上传文件
+      let result;
+      if (this.strategy === 'oss') {
+        // 校验OSS配置是否完整
+        if (!this.validateOssConfig()) {
+          this.logger.warn('OSS配置不完整，将使用本地存储');
+          result = await this.uploadToLocal(file, type);
+        } else {
+          result = await this.uploadToOSS(file, type);
+        }
+      } else {
+        // 默认使用本地存储
+        result = await this.uploadToLocal(file, type);
+      }
+
+      // 保存文件信息到数据库
+      try {
+        const saveResult = await this.fileRepository.save({
+          fileMd5,
+          url: result.url,
+          path: result.path,
+          fileSize: file.size || 0, // 保存文件大小
+        });
+        this.logger.log(`文件记录保存成功: ${JSON.stringify(saveResult)}`);
+      } catch (dbError) {
+        this.logger.error(`保存文件记录失败: ${dbError.message}`, dbError.stack);
+        // 继续返回上传结果，即使数据库记录失败
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`上传处理失败: ${error.message}`, error.stack);
+      throw error;
     }
   }
 
@@ -63,58 +149,37 @@ export class UploadService {
     type: string,
   ): Promise<{ url: string; path: string }> {
     try {
-      // 获取本地存储配置
-      const localUrl = this.configService.get('upload.local.url');
-      const localPath = this.configService.get('upload.local.path');
-
-      // 验证文件是否存在
-      if (!file || !file.buffer) {
-        throw new Error('上传文件不存在或内容为空');
-      }
-
-      console.log('准备上传文件:', file.originalname, '大小:', file.size, '类型:', file.mimetype);
-
-      // 根据文件类型和日期创建存储路径
-      const datePath = dayjs().format('YYYY-MM-DD');
-      const webPath = `${type}/${datePath}`;
-
-      // 文件系统路径 - 使用当前系统的路径分隔符
-      const dirPath = path.join(localPath, type);
-
-      // 确保目录存在 - 先只创建主目录
-      await this.ensureDir(dirPath);
-
-      // 再创建日期子目录
-      const fullDirPath = path.join(dirPath, datePath);
-      await this.ensureDir(fullDirPath);
+      this.logger.log('开始上传文件到本地服务器');
 
       // 生成文件名
-      const timestamp = Date.now();
-      const randomStr = crypto.randomBytes(8).toString('hex');
-      const fileName = `${timestamp}-${randomStr}${path.extname(file.originalname)}`;
+      const nanoid = customAlphabet('1234567890abcdef', 10);
+      const fileName = `${nanoid()}${extname(file.originalname)}`;
 
-      // 文件保存路径
-      const filePath = path.join(fullDirPath, fileName);
-      console.log('保存文件路径:', filePath);
+      // 构建本地存储路径，按年月分类
+      const dateFolder = dayjs().format(this.DATE_FORMAT);
+      const directory = join(this.localPath, type, dateFolder);
 
-      // 使用fs.promises.writeFile代替流写入
-      await fs.promises.writeFile(filePath, file.buffer);
-      console.log('文件写入成功');
+      // 确保目录存在
+      this.ensureDir(directory);
 
-      // 构建一个基于控制器路由的URL
-      const baseUrl = localUrl.endsWith('/') ? localUrl.slice(0, -1) : localUrl; // 移除尾部斜杠
-      const fileUrl = `${baseUrl}/uploads/${type}/${datePath}/${fileName}`;
-      // 修复路径中可能出现的双重uploads
-      const finalUrl = fileUrl.replace('/uploads/uploads/', '/uploads/');
-      console.log('文件URL:', finalUrl);
+      // 生成文件存储路径
+      const filePath = join(directory, fileName);
+
+      // 保存文件
+      writeFileSync(resolve(process.cwd(), filePath), file.buffer);
+
+      // 构建访问URL
+      const fileUrl = `${this.localUrl}${filePath.replace(/\\/g, '/')}`;
+
+      this.logger.log(`文件上传到本地成功: ${fileUrl}`);
 
       return {
-        url: finalUrl,
+        url: fileUrl,
         path: filePath,
       };
     } catch (error) {
-      console.error('本地上传失败:', error);
-      throw new Error(`本地上传失败: ${error.message}`);
+      this.logger.error(`上传文件到本地失败: ${error.message}`, error.stack);
+      throw error;
     }
   }
 
@@ -129,55 +194,56 @@ export class UploadService {
     type: string,
   ): Promise<{ url: string; path: string }> {
     try {
-      // 直接从环境变量获取OSS配置
-      const accessKeyId = this.configService.get('OSS_ACCESS_KEY_ID');
-      const accessKeySecret = this.configService.get('OSS_ACCESS_KEY_SECRET');
-      const region = this.configService.get('OSS_REGION');
-      const bucket = this.configService.get('OSS_BUCKET');
-      const endpoint = this.configService.get('OSS_ENDPOINT');
+      this.logger.log('开始上传文件到阿里云OSS');
 
-      // 尝试从upload.oss配置中获取（fallback）
-      const ossConfig = this.configService.get('upload.oss');
-
-      // 优先使用环境变量，如果没有则使用配置
-      const finalAccessKeyId = accessKeyId || (ossConfig && ossConfig.accessKeyId);
-      const finalAccessKeySecret = accessKeySecret || (ossConfig && ossConfig.accessKeySecret);
-      const finalRegion = region || (ossConfig && ossConfig.region);
-      const finalBucket = bucket || (ossConfig && ossConfig.bucketName);
-      const finalEndpoint = endpoint || (ossConfig && ossConfig.endpoint);
-
-      if (!finalAccessKeyId || !finalAccessKeySecret || !finalRegion || !finalBucket) {
-        throw new Error('阿里云OSS配置不完整');
-      }
-
-      console.log('OSS配置信息检查：', {
-        accessKeyId: !!finalAccessKeyId,
-        accessKeySecret: !!finalAccessKeySecret,
-        region: finalRegion,
-        bucket: finalBucket,
-        endpoint: finalEndpoint,
+      // 创建OSS客户端
+      const client = new AliOSS({
+        accessKeyId: this.ossConfig.accessKeyId,
+        accessKeySecret: this.ossConfig.accessKeySecret,
+        region: this.ossConfig.region,
+        bucket: this.ossConfig.bucketName,
+        endpoint: this.ossConfig.endpoint,
       });
 
-      // 生成OSS路径
-      const datePath = dayjs().format('YYYY/MM/DD');
-      const timestamp = Date.now();
-      const randomStr = crypto.randomBytes(8).toString('hex');
-      const fileName = `${timestamp}-${randomStr}${path.extname(file.originalname)}`;
-      const ossPath = `${type}/${datePath}/${fileName}`;
+      // 生成文件名
+      const nanoid = customAlphabet('1234567890abcdef', 10);
+      const fileName = `${nanoid()}${extname(file.originalname)}`;
 
-      // 使用环境变量中的endpoint构建OSS URL
-      const url = `${finalEndpoint.replace('https://', `https://${finalBucket}.`)}/${ossPath}`;
+      // 构建OSS路径，按年月分类
+      const dateFolder = dayjs().format(this.DATE_FORMAT);
+      const ossPath = `${type}/${dateFolder}/${fileName}`;
 
-      // 临时方案，暂不执行实际上传，仅返回URL结构
-      console.warn('阿里云OSS SDK未启用，仅返回URL结构，未实际上传');
-      console.log('生成的URL:', url);
+      // 上传文件到OSS
+      const result = await client.put(ossPath, file.buffer);
+      this.logger.log(`文件上传到OSS成功: ${result.url}`);
+
+      // 使用OSS CDN替换URL
+      let fileUrl = result.url;
+      if (this.ossCdnUrl) {
+        try {
+          const ossUrl = new URL(result.url);
+          fileUrl = `${this.ossCdnUrl}${ossUrl.pathname}`;
+          this.logger.log(`替换为CDN URL: ${fileUrl}`);
+        } catch (error) {
+          this.logger.error(`URL替换失败: ${error.message}`);
+
+          // 备用方案: 直接硬编码替换域名
+          if (result.url.includes('aliyuncs.com')) {
+            fileUrl = result.url.replace(/https?:\/\/[^\/]+/, this.ossCdnUrl);
+            this.logger.log(`备用方案替换URL: ${fileUrl}`);
+          }
+        }
+      }
+
       return {
-        url,
+        url: fileUrl,
         path: ossPath,
       };
     } catch (error) {
-      console.error('上传至阿里云OSS失败', error);
-      throw new Error(`上传至阿里云OSS失败: ${error.message}`);
+      this.logger.error(`上传文件到OSS失败: ${error.message}`, error.stack);
+      // 如果上传到OSS失败，则尝试上传到本地
+      this.logger.warn('OSS上传失败，将使用本地存储');
+      return this.uploadToLocal(file, type);
     }
   }
 
@@ -252,8 +318,10 @@ export class UploadService {
    * @returns 上传结果
    */
   private async uploadToCOS(
-    file: Express.Multer.File,
-    type: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _file: Express.Multer.File,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _type: string,
   ): Promise<{ url: string; path: string }> {
     // TODO: 集成腾讯云COS SDK
     // 实现上传逻辑
@@ -267,8 +335,10 @@ export class UploadService {
    * @returns 上传结果
    */
   private async uploadToQiniu(
-    file: Express.Multer.File,
-    type: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _file: Express.Multer.File,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _type: string,
   ): Promise<{ url: string; path: string }> {
     // TODO: 集成七牛云SDK
     // 实现上传逻辑
@@ -279,11 +349,27 @@ export class UploadService {
    * 确保目录存在
    * @param dir 目录路径
    */
-  private async ensureDir(dir: string): Promise<void> {
-    try {
-      await fs.promises.access(dir);
-    } catch (error) {
-      await fs.promises.mkdir(dir, { recursive: true });
+  private ensureDir(dir: string): void {
+    const fullPath = resolve(process.cwd(), dir);
+    this.logger.log(`检查目录是否存在: ${fullPath}`);
+
+    if (!existsSync(fullPath)) {
+      this.logger.log(`目录不存在，开始创建: ${fullPath}`);
+      mkdirSync(fullPath, { recursive: true });
+      this.logger.log(`目录创建成功: ${fullPath}`);
+    } else {
+      this.logger.log(`目录已存在: ${fullPath}`);
     }
+  }
+
+  /**
+   * 验证OSS配置是否完整
+   */
+  private validateOssConfig(): boolean {
+    const { accessKeyId, accessKeySecret, bucketName } = this.ossConfig;
+    if (!accessKeyId || !accessKeySecret || !bucketName) {
+      return false;
+    }
+    return true;
   }
 }

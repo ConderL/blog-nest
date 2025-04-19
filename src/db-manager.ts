@@ -245,6 +245,7 @@ async function initializeData(): Promise<void> {
     handleDbError(error);
   }
 }
+
 /**
  * 处理数据库错误
  */
@@ -309,4 +310,41 @@ if (require.main === module) {
 }
 
 // 导出函数，以便其他模块调用
-export { initializeData, syncDatabase, createDataSource };
+export { initializeData, syncDatabase, createDataSource, fixTableStructure };
+
+/**
+ * 修复表结构
+ * 为用户表添加status字段
+ * 为访问日志表添加referer字段
+ * 为上传文件表添加file_size字段
+ */
+async function fixTableStructure() {
+  console.log('开始修复表结构...');
+
+  const dataSource = createDataSource();
+  const connection = dataSource.createQueryRunner();
+  await connection.connect();
+
+  try {
+    // 检查t_user表中是否存在status字段
+    const userColumnsResult = await connection.query('SHOW COLUMNS FROM t_user');
+    const userColumns = userColumnsResult.map((col) => col.Field);
+
+    if (!userColumns.includes('status')) {
+      console.log('t_user表中缺少status字段，开始添加...');
+      await connection.query(
+        'ALTER TABLE t_user ADD COLUMN status INT DEFAULT 1 COMMENT "用户状态：0-禁用，1-正常"',
+      );
+      console.log('t_user表status字段添加成功');
+    } else {
+      console.log('t_user表已存在status字段，无需修复');
+    }
+
+    console.log('表结构修复完成');
+  } catch (e) {
+    console.error('修复表结构失败：', e.message);
+    throw e;
+  } finally {
+    await connection.release();
+  }
+}

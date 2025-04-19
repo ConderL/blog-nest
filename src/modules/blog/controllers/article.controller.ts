@@ -328,23 +328,19 @@ export class AdminArticleController {
       );
 
       // 调用服务更新文章
-      await this.articleService.update(updateData.id, updateData, tagIds);
-      console.log('更新结果: 成功');
+      const updatedArticle = await this.articleService.update(updateData.id, updateData, tagIds);
+      console.log('更新结果:', updatedArticle ? '成功' : '失败');
 
-      // 简化的响应，只返回成功消息
       return res.status(HttpStatus.OK).json({
         code: 200,
-        flag: true,
-        msg: '更新成功',
-        data: '更新成功',
+        message: '更新成功',
+        data: updatedArticle,
       });
     } catch (error) {
       console.error('更新文章时出错:', error);
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         code: 500,
-        flag: false,
-        msg: '更新失败: ' + error.message,
-        data: null,
+        message: '更新失败: ' + error.message,
       });
     }
   }
