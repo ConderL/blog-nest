@@ -421,3 +421,46 @@ export class AdminArticleController {
     }
   }
 }
+
+// 归档接口
+@ApiTags('归档')
+@Controller('archives')
+export class ArchivesController {
+  constructor(private readonly articleService: ArticleService) {}
+
+  @Get('list')
+  @ApiOperation({ summary: '获取归档文章列表' })
+  @Public()
+  async findArchivesList(
+    @Query('current') current: string = '1',
+    @Query('size') size: string = '10',
+  ): Promise<any> {
+    const result = await this.articleService.findAll(
+      +current,
+      +size,
+      undefined,
+      undefined,
+      undefined,
+      1, // 状态为已发布
+      0, // 未删除
+    );
+
+    // 仅保留需要的字段
+    const recordList = result.recordList.map((article) => ({
+      id: article.id,
+      articleTitle: article.articleTitle,
+      articleCover: article.articleCover,
+      createTime: article.createTime,
+    }));
+
+    return {
+      flag: true,
+      code: 200,
+      msg: '操作成功',
+      data: {
+        recordList,
+        count: result.count,
+      },
+    };
+  }
+}

@@ -144,10 +144,24 @@ export class TagService {
   /**
    * 获取标签列表
    */
-  async findAll(): Promise<Tag[]> {
-    return await this.tagRepository.find({
+  async findAll(): Promise<any[]> {
+    const tags = await this.tagRepository.find({
       order: { createTime: 'DESC' },
     });
+
+    // 查询每个标签关联的文章数量
+    const tagsWithArticleCount = await Promise.all(
+      tags.map(async (tag) => {
+        const articleCount = await this.getArticleCountByTagId(tag.id);
+        return {
+          id: tag.id,
+          tagName: tag.tagName,
+          articleCount,
+        };
+      }),
+    );
+
+    return tagsWithArticleCount;
   }
 
   /**

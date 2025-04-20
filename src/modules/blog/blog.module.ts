@@ -17,6 +17,8 @@ import { Friend } from './entities/friend.entity';
 import { SiteConfig } from './entities/site-config.entity';
 import { VisitLog } from './entities/visit-log.entity';
 import { User } from '../user/entities/user.entity';
+import { Carousel } from './entities/carousel.entity';
+import { UploadFileEntity } from '../upload/entities/file.entity';
 
 // 服务
 import { ArticleService } from './services/article.service';
@@ -29,10 +31,19 @@ import { SiteConfigService } from './services/site-config.service';
 import { VisitLogService } from './services/visit-log.service';
 import { SearchService } from './services/search.service';
 import { BlogInfoService } from './services/blog-info.service';
+import { CarouselService } from './services/carousel.service';
 
 // 控制器
-import { ArticleController, AdminArticleController } from './controllers/article.controller';
-import { CategoryController, AdminCategoryController } from './controllers/category.controller';
+import {
+  ArticleController,
+  AdminArticleController,
+  ArchivesController,
+} from './controllers/article.controller';
+import {
+  CategoryController,
+  AdminCategoryController,
+  CategorieController,
+} from './controllers/category.controller';
 import { TagController, AdminTagController } from './controllers/tag.controller';
 import { CommentController } from './controllers/comment.controller';
 import { FileController } from './controllers/file.controller';
@@ -44,6 +55,7 @@ import {
 import { VisitLogController } from './controllers/visit-log.controller';
 import { SearchController } from './controllers/search.controller';
 import { BlogInfoController } from './controllers/blog-info.controller';
+import { CarouselController, AdminCarouselController } from './controllers/carousel.controller';
 
 // 拦截器
 import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interceptor';
@@ -65,6 +77,8 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
       SiteConfig,
       VisitLog,
       User,
+      Carousel,
+      UploadFileEntity,
     ]),
     MulterModule.register({
       storage: diskStorage({
@@ -83,7 +97,9 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
   controllers: [
     ArticleController,
     AdminArticleController,
+    ArchivesController,
     CategoryController,
+    CategorieController,
     AdminCategoryController,
     TagController,
     AdminTagController,
@@ -95,6 +111,8 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     VisitLogController,
     SearchController,
     BlogInfoController,
+    CarouselController,
+    AdminCarouselController,
   ],
   providers: [
     ArticleService,
@@ -107,6 +125,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     VisitLogService,
     SearchService,
     BlogInfoService,
+    CarouselService,
     VisitLogInterceptor,
   ],
   exports: [
@@ -120,6 +139,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     VisitLogService,
     SearchService,
     BlogInfoService,
+    CarouselService,
     VisitLogInterceptor,
   ],
 })

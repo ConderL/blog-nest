@@ -8,52 +8,84 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { OperationLog } from '../../../common/decorators/operation-log.decorator';
 import { OperationType } from '../../../common/enums/operation-type.enum';
 import { VisitLog } from '../../../common/decorators/visit-log.decorator';
+import { ArticleService } from '../services/article.service';
 
 // 前台标签接口
 @ApiTags('标签')
-@Controller('tags')
+@Controller('tag')
 export class TagController {
-  constructor(private readonly tagService: TagService) {}
+  constructor(
+    private readonly tagService: TagService,
+    private readonly articleService: ArticleService,
+  ) {}
 
-  @Post()
-  @ApiOperation({ summary: '创建标签' })
-  @UseGuards(JwtAuthGuard)
-  async create(@Body() tag: Partial<Tag>): Promise<ResultDto<Tag>> {
-    const result = await this.tagService.create(tag);
-    return ResultDto.success(result);
-  }
-
-  @Put(':id')
-  @ApiOperation({ summary: '更新标签' })
-  @UseGuards(JwtAuthGuard)
-  async update(@Param('id') id: number, @Body() tag: Partial<Tag>): Promise<ResultDto<Tag>> {
-    const result = await this.tagService.update(id, tag);
-    return ResultDto.success(result);
-  }
-
-  @Delete(':id')
-  @ApiOperation({ summary: '删除标签' })
-  @UseGuards(JwtAuthGuard)
-  async remove(@Param('id') id: number): Promise<ResultDto<null>> {
-    await this.tagService.remove(id);
-    return ResultDto.success(null);
-  }
-
-  @Get()
+  @Get('list')
   @ApiOperation({ summary: '获取所有标签' })
   @Public()
   @VisitLog('文章标签')
-  async findAll(): Promise<ResultDto<Tag[]>> {
+  async findAll(): Promise<any> {
     const result = await this.tagService.findAll();
-    return ResultDto.success(result);
+    return {
+      flag: true,
+      code: 200,
+      msg: '操作成功',
+      data: result,
+    };
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: '获取指定标签' })
+  @Get('article')
+  @ApiOperation({ summary: '根据标签ID查询文章列表' })
   @Public()
-  async findOne(@Param('id') id: number): Promise<ResultDto<Tag>> {
-    const result = await this.tagService.findById(id);
-    return ResultDto.success(result);
+  async findArticlesByTagId(
+    @Query('tagId') tagId: string,
+    @Query('current') current: string = '1',
+    @Query('size') size: string = '10',
+  ): Promise<any> {
+    if (!tagId) {
+      return {
+        flag: false,
+        code: 400,
+        msg: '标签ID不能为空',
+        data: null,
+      };
+    }
+
+    const tag = await this.tagService.findById(+tagId);
+    const result = await this.articleService.findAll(
+      +current,
+      +size,
+      undefined,
+      undefined,
+      +tagId,
+      1, // 状态为已发布
+      0, // 未删除
+    );
+
+    // 格式化文章数据，确保包含所需字段
+    const articles = result.recordList.map((article) => ({
+      id: article.id,
+      articleCover: article.articleCover,
+      articleTitle: article.articleTitle,
+      category: {
+        id: article.category?.id,
+        categoryName: article.category?.categoryName,
+      },
+      tagVOList: article.tags.map((tag) => ({
+        id: tag.id,
+        tagName: tag.tagName,
+      })),
+      createTime: article.createTime,
+    }));
+
+    return {
+      flag: true,
+      code: 200,
+      msg: '操作成功',
+      data: {
+        articleConditionVOList: articles,
+        name: tag.tagName,
+      },
+    };
   }
 }
 

@@ -74,8 +74,24 @@ export class CategoryService {
   /**
    * 获取所有分类
    */
-  async findAll(): Promise<Category[]> {
-    return this.categoryRepository.find({ order: { createTime: 'DESC' } });
+  async findAll(): Promise<any[]> {
+    const categories = await this.categoryRepository.find({
+      order: { createTime: 'DESC' },
+    });
+
+    // 获取每个分类下的文章数量
+    const result = await Promise.all(
+      categories.map(async (category) => {
+        const articleCount = await this.getArticleCountByCategory(category.id);
+        return {
+          id: category.id,
+          categoryName: category.categoryName,
+          articleCount,
+        };
+      }),
+    );
+
+    return result;
   }
 
   /**

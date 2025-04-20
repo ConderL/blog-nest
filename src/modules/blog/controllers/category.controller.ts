@@ -8,6 +8,72 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { OperationLog } from '../../../common/decorators/operation-log.decorator';
 import { OperationType } from '../../../common/enums/operation-type.enum';
 import { VisitLog } from '../../../common/decorators/visit-log.decorator';
+import { ArticleService } from '../services/article.service';
+
+// 前台新版分类接口
+@ApiTags('分类')
+@Controller('categorie')
+export class CategorieController {
+  constructor(
+    private readonly categoryService: CategoryService,
+    private readonly articleService: ArticleService,
+  ) {}
+
+  @Get('article')
+  @ApiOperation({ summary: '根据分类ID查询文章列表' })
+  @Public()
+  async findArticlesByCategoryId(
+    @Query('categorieId') categorieId: string,
+    @Query('current') current: string = '1',
+    @Query('size') size: string = '10',
+  ): Promise<any> {
+    if (!categorieId) {
+      return {
+        flag: false,
+        code: 400,
+        msg: '分类ID不能为空',
+        data: null,
+      };
+    }
+
+    const category = await this.categoryService.findById(+categorieId);
+    const result = await this.articleService.findAll(
+      +current,
+      +size,
+      undefined,
+      +categorieId, // 这里使用分类ID
+      undefined,
+      1, // 状态为已发布
+      0, // 未删除
+    );
+
+    // 格式化文章数据，确保包含所需字段
+    const articles = result.recordList.map((article) => ({
+      id: article.id,
+      articleCover: article.articleCover,
+      articleTitle: article.articleTitle,
+      category: {
+        id: article.category?.id,
+        categoryName: article.category?.categoryName,
+      },
+      tagVOList: article.tags.map((tag) => ({
+        id: tag.id,
+        tagName: tag.tagName,
+      })),
+      createTime: article.createTime,
+    }));
+
+    return {
+      flag: true,
+      code: 200,
+      msg: '操作成功',
+      data: {
+        articleConditionVOList: articles,
+        name: category.categoryName,
+      },
+    };
+  }
+}
 
 // 前台分类接口
 @ApiTags('分类')
@@ -46,9 +112,14 @@ export class CategoryController {
   @ApiOperation({ summary: '获取所有分类' })
   @Public()
   @VisitLog('文章分类')
-  async findAll(): Promise<ResultDto<Category[]>> {
+  async findAll(): Promise<any> {
     const result = await this.categoryService.findAll();
-    return ResultDto.success(result);
+    return {
+      flag: true,
+      code: 200,
+      msg: '操作成功',
+      data: result,
+    };
   }
 
   @Get('tree')

@@ -155,9 +155,15 @@ export class UploadService {
       const nanoid = customAlphabet('1234567890abcdef', 10);
       const fileName = `${nanoid()}${extname(file.originalname)}`;
 
-      // 构建本地存储路径，按年月分类
-      const dateFolder = dayjs().format(this.DATE_FORMAT);
-      const directory = join(this.localPath, type, dateFolder);
+      // 构建本地存储路径，轮播图类型不包含日期
+      let directory;
+      if (type === 'carousel') {
+        directory = join(this.localPath, type);
+      } else {
+        // 其他类型按年月分类
+        const dateFolder = dayjs().format(this.DATE_FORMAT);
+        directory = join(this.localPath, type, dateFolder);
+      }
 
       // 确保目录存在
       this.ensureDir(directory);
@@ -209,9 +215,15 @@ export class UploadService {
       const nanoid = customAlphabet('1234567890abcdef', 10);
       const fileName = `${nanoid()}${extname(file.originalname)}`;
 
-      // 构建OSS路径，按年月分类
-      const dateFolder = dayjs().format(this.DATE_FORMAT);
-      const ossPath = `${type}/${dateFolder}/${fileName}`;
+      // 构建OSS路径，轮播图类型不包含日期
+      let ossPath;
+      if (type === 'carousel') {
+        ossPath = `${type}/${fileName}`;
+      } else {
+        // 其他类型按年月分类
+        const dateFolder = dayjs().format(this.DATE_FORMAT);
+        ossPath = `${type}/${dateFolder}/${fileName}`;
+      }
 
       // 上传文件到OSS
       const result = await client.put(ossPath, file.buffer);
