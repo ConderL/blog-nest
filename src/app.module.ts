@@ -13,6 +13,7 @@ import { SearchModule } from './modules/search/search.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { EmailModule } from './modules/email/email.module';
 import { CacheModule } from '@nestjs/cache-manager';
+import { CaptchaModule } from './modules/captcha/captcha.module';
 
 import configuration from './config/configuration';
 
@@ -58,6 +59,7 @@ import configuration from './config/configuration';
     AuthModule,
     UserModule,
     BlogModule,
+    CaptchaModule,
   ],
   providers: [
     {

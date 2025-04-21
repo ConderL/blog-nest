@@ -1,12 +1,24 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  UnauthorizedException,
+  NotFoundException,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
-import { LoginDto } from '../user/dto/login.dto';
+import { LoginDto } from './dto/login.dto';
 import { ResultDto } from '../../common/dtos/result.dto';
-import * as bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcrypt';
+import { CaptchaService } from '../captcha/captcha.service';
 import * as forge from 'node-forge';
 
-// 解密密码的辅助函数
+/**
+ * 解密密码
+ * 注意：这是一个示例函数，实际上并没有真正的解密操作，
+ * 密码验证应该使用哈希比较而不是解密
+ */
 function decryptPassword(encryptedPassword: string): string {
   try {
     console.log('尝试解密密码，长度:', encryptedPassword.length);
@@ -83,106 +95,94 @@ export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
+    private readonly captchaService: CaptchaService,
   ) {}
 
+  /**
+   * 验证用户
+   * @param username 用户名
+   * @param encryptedPassword 加密后的密码
+   * @returns 用户信息
+   */
   async validateUser(username: string, encryptedPassword: string): Promise<any> {
-    this.logger.log(`尝试验证用户: ${username}`);
-
-    const user = await this.userService.findByUsername(username);
-    if (!user) {
-      this.logger.warn(`用户名不存在: ${username}`);
-      throw new UnauthorizedException('用户名不存在');
-    }
-
-    this.logger.log(`找到用户: ${username}, ID: ${user.id}`);
-
+    this.logger.log(`验证用户: ${username}`);
     try {
-      try {
-        // 尝试解密前端加密的密码
-        this.logger.log('尝试解密密码...');
-        const decryptedPassword = decryptPassword(encryptedPassword);
-        this.logger.log(`密码解密成功，长度: ${decryptedPassword.length}`);
+      // 查询用户
+      const user = await this.userService.findByUsername(username);
 
-        // 使用bcrypt比较解密后的密码和数据库中的哈希密码
-        const isPasswordValid = await bcrypt.compare(decryptedPassword, user.password);
-        if (isPasswordValid) {
-          this.logger.log('密码验证成功');
-          // 移除密码字段，返回用户信息
-          const { password, ...result } = user;
-          return result;
-        } else {
-          this.logger.warn('密码不匹配');
-          throw new UnauthorizedException('密码错误');
-        }
-      } catch (decryptError) {
-        this.logger.error(`密码解密失败: ${decryptError.message}`);
-
-        // 尝试直接验证明文密码
-        this.logger.log('尝试直接比较明文密码...');
-        const isDirectPasswordValid = await bcrypt.compare(encryptedPassword, user.password);
-        if (isDirectPasswordValid) {
-          this.logger.log('明文密码验证成功');
-          // 移除密码字段，返回用户信息
-          const { password, ...result } = user;
-          return result;
-        }
-
-        this.logger.warn('密码验证失败');
-        throw new UnauthorizedException('密码错误');
+      if (!user) {
+        this.logger.warn(`用户不存在: ${username}`);
+        throw new NotFoundException('用户不存在');
       }
+
+      // 验证密码
+      let isMatch = false;
+      if (user.password === encryptedPassword) {
+        // 明文密码匹配
+        isMatch = true;
+      } else {
+        // 尝试使用bcrypt比较
+        try {
+          this.logger.log(`尝试使用bcrypt比较: ${decryptPassword(encryptedPassword)}`);
+          this.logger.log(`用户密码: ${user.password}`);
+          isMatch = await bcrypt.compare(decryptPassword(encryptedPassword), user.password);
+        } catch (e) {
+          this.logger.warn(`密码比较失败，尝试直接比较: ${e.message}`);
+          // 直接比较（不安全，仅作为备选）
+          isMatch = decryptPassword(encryptedPassword) === user.password;
+        }
+      }
+
+      if (!isMatch) {
+        this.logger.warn(`密码不正确: ${username}`);
+        throw new InternalServerErrorException('密码不正确');
+      }
+
+      // 检查账号是否禁用
+      if (user.isDisable !== undefined && user.isDisable !== null && user.isDisable === 1) {
+        this.logger.warn(`账号已被禁用: ${username}`);
+        throw new InternalServerErrorException('账号已被禁用');
+      }
+
+      // 返回用户信息
+      const { password, ...result } = user;
+      return result;
     } catch (error) {
-      this.logger.error(`验证过程发生错误: ${error.message}`);
-      throw new UnauthorizedException('验证密码失败');
-    }
-  }
-
-  async login(loginDto: LoginDto): Promise<ResultDto<any>> {
-    try {
-      const user = await this.validateUser(loginDto.username, loginDto.password);
-
-      const payload = { username: user.username, sub: user.id };
-      const token = this.jwtService.sign(payload);
-
-      // 获取用户角色
-      const roleList = await this.userService.getUserRoles(user.id);
-
-      // 获取用户权限列表
-      const permissionList = await this.userService.getUserPermissions(user.id);
-
-      // 组装用户信息
-      const userInfo = {
-        id: user.id,
-        username: user.username,
-        nickname: user.nickname || user.username,
-        avatar: user.avatar || '',
-        email: user.email || '',
-        roleList,
-        permissionList,
-        token,
-      };
-
-      // 返回用户信息和token
-      return ResultDto.success(userInfo);
-    } catch (error) {
-      return ResultDto.fail(error.message, error.status || 400);
+      this.logger.error(`验证用户失败: ${error.message}`);
+      throw error;
     }
   }
 
   /**
-   * 获取用户个人资料
+   * 用户登录
    */
-  async getProfile(userId: number): Promise<ResultDto<any>> {
+  async login(loginDto: LoginDto): Promise<ResultDto<any>> {
+    this.logger.log(`用户登录请求: ${loginDto.username}`);
     try {
-      const user = await this.userService.findById(userId);
-      if (!user) {
-        return ResultDto.fail('用户不存在');
+      // 验证验证码
+      const isCaptchaValid = await this.captchaService.validateCaptcha(
+        loginDto.captchaUUID,
+        loginDto.code,
+        loginDto.type,
+      );
+
+      if (!isCaptchaValid) {
+        this.logger.warn(`验证码错误: ${loginDto.code}`);
+        throw new InternalServerErrorException('验证码错误');
       }
 
-      // 获取用户角色
-      const roleList = await this.userService.getUserRoles(userId);
+      // 验证用户
+      const user = await this.validateUser(loginDto.username, loginDto.password);
+      this.logger.log(`用户验证成功: ${user.username}`);
 
-      // 获取用户权限列表
-      const permissionList = await this.userService.getUserPermissions(userId);
+      // 生成JWT令牌
+      const payload = { username: user.username, sub: user.id };
+      const token = this.jwtService.sign(payload);
+      this.logger.log(`生成JWT令牌: ${token.substring(0, 20)}...，长度: ${token.length}`);
+
+      // 获取用户角色
+      const roleList = await this.userService.getUserRoles(user.id);
+      this.logger.log(`获取到用户角色: ${JSON.stringify(roleList)}`);
 
       // 组装用户信息
       const userInfo = {
@@ -190,13 +190,47 @@ export class AuthService {
         username: user.username,
         nickname: user.nickname || user.username,
         avatar: user.avatar || '',
-        email: user.email || '',
-        roleList,
-        permissionList,
+        roleList: roleList,
+        token: token,
       };
 
+      this.logger.log(`用户登录成功: ${user.username}`);
       return ResultDto.success(userInfo);
     } catch (error) {
+      this.logger.error(`用户登录失败: ${error.message}`);
+      return ResultDto.fail(error.message, error.status || 500);
+    }
+  }
+
+  /**
+   * 获取用户信息
+   */
+  async getProfile(userId: number): Promise<ResultDto<any>> {
+    this.logger.log(`获取用户信息: ${userId}`);
+    try {
+      const user = await this.userService.findById(userId);
+      if (!user) {
+        this.logger.warn(`用户不存在: ${userId}`);
+        throw new NotFoundException('用户不存在');
+      }
+
+      // 获取用户角色
+      const roleList = await this.userService.getUserRoles(user.id);
+      this.logger.log(`获取到用户角色: ${JSON.stringify(roleList)}`);
+
+      // 组装用户信息
+      const userInfo = {
+        id: user.id,
+        username: user.username,
+        nickname: user.nickname || user.username,
+        avatar: user.avatar || '',
+        roleList: roleList,
+      };
+
+      this.logger.log(`获取用户信息成功: ${userId}`);
+      return ResultDto.success(userInfo);
+    } catch (error) {
+      this.logger.error(`获取用户信息失败: ${error.message}`);
       return ResultDto.fail(error.message, error.status || 400);
     }
   }
@@ -207,6 +241,19 @@ export class AuthService {
   async adminLogin(loginDto: LoginDto): Promise<ResultDto<any>> {
     this.logger.log(`管理员登录请求: ${loginDto.username}`);
     try {
+      // 验证验证码
+      const isCaptchaValid = await this.captchaService.validateCaptcha(
+        loginDto.captchaUUID,
+        loginDto.code,
+        loginDto.type,
+      );
+
+      if (!isCaptchaValid) {
+        this.logger.warn(`验证码错误: ${loginDto.code}`);
+        throw new InternalServerErrorException('验证码错误');
+      }
+
+      // 验证用户
       const user = await this.validateUser(loginDto.username, loginDto.password);
       this.logger.log(`用户验证成功: ${user.username}`);
 
@@ -296,7 +343,7 @@ export class AuthService {
       return ResultDto.success(userInfo); // 返回完整的用户信息，包括token
     } catch (error) {
       this.logger.error(`管理员登录失败: ${error.message}`);
-      return ResultDto.fail(error.message, error.status || 400);
+      return ResultDto.fail(error.message, error.status || 500);
     }
   }
 

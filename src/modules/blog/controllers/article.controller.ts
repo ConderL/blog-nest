@@ -433,7 +433,7 @@ export class ArchivesController {
   @Public()
   async findArchivesList(
     @Query('current') current: string = '1',
-    @Query('size') size: string = '10',
+    @Query('size') size: string = '10'
   ): Promise<any> {
     const result = await this.articleService.findAll(
       +current,
@@ -442,25 +442,25 @@ export class ArchivesController {
       undefined,
       undefined,
       1, // 状态为已发布
-      0, // 未删除
+      0  // 未删除
     );
-
+    
     // 仅保留需要的字段
-    const recordList = result.recordList.map((article) => ({
+    const recordList = result.recordList.map(article => ({
       id: article.id,
       articleTitle: article.articleTitle,
       articleCover: article.articleCover,
-      createTime: article.createTime,
+      createTime: article.createTime
     }));
-
+    
     return {
       flag: true,
       code: 200,
       msg: '操作成功',
       data: {
         recordList,
-        count: result.count,
-      },
+        count: result.count
+      }
     };
   }
 }
