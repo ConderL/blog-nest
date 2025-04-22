@@ -7,6 +7,9 @@ import { AuthController, AdminAuthController } from './auth.controller';
 import { UserModule } from '../user/user.module';
 import { JwtStrategy } from 'src/common/strategies/jwt.strategy';
 import { CaptchaModule } from '../captcha/captcha.module';
+import { QueueModule } from '../queue/queue.module';
+import { CacheModule } from '@nestjs/cache-manager';
+import { redisStore } from 'cache-manager-redis-yet';
 
 @Module({
   imports: [
@@ -14,6 +17,20 @@ import { CaptchaModule } from '../captcha/captcha.module';
     UserModule,
     CaptchaModule,
     ConfigModule,
+    QueueModule,
+    CacheModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        store: await redisStore({
+          socket: {
+            host: configService.get('redis.host', 'localhost'),
+            port: configService.get('redis.port', 6379),
+          },
+          ttl: 60 * 5 * 1000, // 默认缓存5分钟
+        }),
+      }),
+      inject: [ConfigService],
+    }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

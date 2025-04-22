@@ -13,6 +13,7 @@ import { RoleService } from './services/role.service';
 import { MenuService } from './services/menu.service';
 import { RoleController } from './controllers/role.controller';
 import { MenuController } from './controllers/menu.controller';
+import { UploadModule } from '../upload/upload.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { MenuController } from './controllers/menu.controller';
       }),
       inject: [ConfigService],
     }),
+    UploadModule,
   ],
   controllers: [UserController, RoleController, MenuController, AdminUserController],
   providers: [UserService, RoleService, MenuService],

@@ -12,12 +12,16 @@ import { LoginDto } from './dto/login.dto';
 import { ResultDto } from '../../common/dtos/result.dto';
 import * as bcrypt from 'bcrypt';
 import { CaptchaService } from '../captcha/captcha.service';
+import { EmailLoginDto, SendEmailCodeDto } from './dto/email-login.dto';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject } from '@nestjs/common';
+import { Cache } from 'cache-manager';
+import { QueueService } from '../queue/services/queue/queue.service';
+import { randomBytes } from 'crypto';
 import * as forge from 'node-forge';
-
+import { RegisterDto } from './dto/register.dto';
 /**
  * 解密密码
- * 注意：这是一个示例函数，实际上并没有真正的解密操作，
- * 密码验证应该使用哈希比较而不是解密
  */
 function decryptPassword(encryptedPassword: string): string {
   try {
@@ -92,10 +96,17 @@ sCAPWVZEH+1PQBg4FdlPiqU=
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
+  // 邮箱验证码缓存前缀
+  private readonly EMAIL_CODE_PREFIX = 'email_code:';
+  // 验证码过期时间（分钟）
+  private readonly EMAIL_CODE_EXPIRE_TIME = 5;
+
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly captchaService: CaptchaService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly queueService: QueueService,
   ) {}
 
   /**
@@ -123,8 +134,6 @@ export class AuthService {
       } else {
         // 尝试使用bcrypt比较
         try {
-          this.logger.log(`尝试使用bcrypt比较: ${decryptPassword(encryptedPassword)}`);
-          this.logger.log(`用户密码: ${user.password}`);
           isMatch = await bcrypt.compare(decryptPassword(encryptedPassword), user.password);
         } catch (e) {
           this.logger.warn(`密码比较失败，尝试直接比较: ${e.message}`);
@@ -135,17 +144,18 @@ export class AuthService {
 
       if (!isMatch) {
         this.logger.warn(`密码不正确: ${username}`);
-        throw new InternalServerErrorException('密码不正确');
+        throw new UnauthorizedException('密码不正确');
       }
 
       // 检查账号是否禁用
       if (user.isDisable !== undefined && user.isDisable !== null && user.isDisable === 1) {
         this.logger.warn(`账号已被禁用: ${username}`);
-        throw new InternalServerErrorException('账号已被禁用');
+        throw new UnauthorizedException('账号已被禁用');
       }
 
       // 返回用户信息
-      const { password, ...result } = user;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password: _, ...result } = user;
       return result;
     } catch (error) {
       this.logger.error(`验证用户失败: ${error.message}`);
@@ -157,22 +167,39 @@ export class AuthService {
    * 用户登录
    */
   async login(loginDto: LoginDto): Promise<ResultDto<any>> {
-    this.logger.log(`用户登录请求: ${loginDto.username}`);
-    try {
-      // 验证验证码
-      const isCaptchaValid = await this.captchaService.validateCaptcha(
-        loginDto.captchaUUID,
-        loginDto.code,
-        loginDto.type,
-      );
+    const username = loginDto.username || loginDto.email;
+    this.logger.log(`用户登录请求: ${username}`);
 
-      if (!isCaptchaValid) {
-        this.logger.warn(`验证码错误: ${loginDto.code}`);
-        throw new InternalServerErrorException('验证码错误');
+    try {
+      // 如果有验证码和验证码UUID，则验证验证码
+      if (loginDto.code && loginDto.captchaUUID) {
+        const isCaptchaValid = await this.captchaService.validateCaptcha(
+          loginDto.captchaUUID,
+          loginDto.code,
+          loginDto.type,
+        );
+
+        if (!isCaptchaValid) {
+          this.logger.warn(`验证码错误: ${loginDto.code}`);
+          throw new BadRequestException('验证码错误');
+        }
       }
 
-      // 验证用户
-      const user = await this.validateUser(loginDto.username, loginDto.password);
+      // 尝试通过用户名或邮箱验证用户
+      let user;
+      if (loginDto.username) {
+        user = await this.validateUser(loginDto.username, loginDto.password);
+      } else if (loginDto.email) {
+        // 先通过邮箱查找用户
+        const foundUser = await this.userService.findByEmail(loginDto.email);
+        if (!foundUser) {
+          throw new NotFoundException('用户不存在');
+        }
+        user = await this.validateUser(foundUser.username, loginDto.password);
+      } else {
+        throw new BadRequestException('请提供用户名或邮箱');
+      }
+
       this.logger.log(`用户验证成功: ${user.username}`);
 
       // 生成JWT令牌
@@ -189,7 +216,8 @@ export class AuthService {
         id: user.id,
         username: user.username,
         nickname: user.nickname || user.username,
-        avatar: user.avatar || '',
+        avatar: user.avatar || 'http://img.conder.top/config/default_avatar.jpg',
+        email: user.email || loginDto.email,
         roleList: roleList,
         token: token,
       };
@@ -198,7 +226,7 @@ export class AuthService {
       return ResultDto.success(userInfo);
     } catch (error) {
       this.logger.error(`用户登录失败: ${error.message}`);
-      return ResultDto.fail(error.message, error.status || 500);
+      return ResultDto.fail(error.message, error.status || 400);
     }
   }
 
@@ -239,22 +267,39 @@ export class AuthService {
    * 管理员登录
    */
   async adminLogin(loginDto: LoginDto): Promise<ResultDto<any>> {
-    this.logger.log(`管理员登录请求: ${loginDto.username}`);
-    try {
-      // 验证验证码
-      const isCaptchaValid = await this.captchaService.validateCaptcha(
-        loginDto.captchaUUID,
-        loginDto.code,
-        loginDto.type,
-      );
+    const username = loginDto.username || loginDto.email;
+    this.logger.log(`管理员登录请求: ${username}`);
 
-      if (!isCaptchaValid) {
-        this.logger.warn(`验证码错误: ${loginDto.code}`);
-        throw new InternalServerErrorException('验证码错误');
+    try {
+      // 如果有验证码和验证码UUID，则验证验证码
+      if (loginDto.code && loginDto.captchaUUID) {
+        const isCaptchaValid = await this.captchaService.validateCaptcha(
+          loginDto.captchaUUID,
+          loginDto.code,
+          loginDto.type,
+        );
+
+        if (!isCaptchaValid) {
+          this.logger.warn(`验证码错误: ${loginDto.code}`);
+          throw new BadRequestException('验证码错误');
+        }
       }
 
-      // 验证用户
-      const user = await this.validateUser(loginDto.username, loginDto.password);
+      // 尝试通过用户名或邮箱验证用户
+      let user;
+      if (loginDto.username) {
+        user = await this.validateUser(loginDto.username, loginDto.password);
+      } else if (loginDto.email) {
+        // 先通过邮箱查找用户
+        const foundUser = await this.userService.findByEmail(loginDto.email);
+        if (!foundUser) {
+          throw new NotFoundException('用户不存在');
+        }
+        user = await this.validateUser(foundUser.username, loginDto.password);
+      } else {
+        throw new BadRequestException('请提供用户名或邮箱');
+      }
+
       this.logger.log(`用户验证成功: ${user.username}`);
 
       // 获取用户角色
@@ -333,6 +378,7 @@ export class AuthService {
         username: user.username,
         nickname: user.nickname || user.username,
         avatar: user.avatar || '',
+        email: user.email || loginDto.email,
         roleList: roleList.map((role) => role.roleLabel || role.id),
         permissionList: permissionList,
         menuList: menuList,
@@ -343,17 +389,256 @@ export class AuthService {
       return ResultDto.success(userInfo); // 返回完整的用户信息，包括token
     } catch (error) {
       this.logger.error(`管理员登录失败: ${error.message}`);
+      return ResultDto.fail(error.message, error.status || 400);
+    }
+  }
+
+  /**
+   * 管理员登出
+   */
+  async adminLogout(token?: string): Promise<ResultDto<null>> {
+    this.logger.log(`管理员登出请求，token: ${token?.slice(0, 10)}...`);
+    try {
+      // 添加到黑名单
+      if (token) {
+        await this.cacheManager.set(`blocked_token:${token}`, 1, 60 * 60 * 24);
+        this.logger.log(`Token已添加到黑名单: ${token.slice(0, 10)}...`);
+        return ResultDto.success(null, '退出登录成功');
+      }
+      return ResultDto.fail('Token无效');
+    } catch (error) {
+      this.logger.error(`管理员登出失败: ${error.message}`);
+      return ResultDto.fail(error.message);
+    }
+  }
+
+  /**
+   * 用户登出
+   */
+  async logout(token?: string): Promise<ResultDto<null>> {
+    this.logger.log(`用户登出请求，token: ${token?.slice(0, 10)}...`);
+    try {
+      // 添加到黑名单
+      if (token) {
+        await this.cacheManager.set(`blocked_token:${token}`, 1, 60 * 60 * 24);
+        this.logger.log(`Token已添加到黑名单: ${token.slice(0, 10)}...`);
+        return ResultDto.success(null, '退出登录成功');
+      }
+      return ResultDto.fail('Token无效');
+    } catch (error) {
+      this.logger.error(`用户登出失败: ${error.message}`);
+      return ResultDto.fail(error.message);
+    }
+  }
+
+  /**
+   * 发送邮箱验证码
+   * @param sendEmailCodeDto 发送邮箱验证码DTO
+   */
+  async sendEmailCode(sendEmailCodeDto: SendEmailCodeDto): Promise<ResultDto<any>> {
+    const { email } = sendEmailCodeDto;
+    this.logger.log(`发送邮箱验证码: ${email}`);
+
+    try {
+      // 生成6位随机验证码
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // 同时使用多种类型缓存验证码，确保兼容性
+      const types = ['ConderView', 'ConderBlog', 'blog'];
+      for (const type of types) {
+        const key = `${this.EMAIL_CODE_PREFIX}${type}:${email}`;
+        await this.cacheManager.set(key, code, this.EMAIL_CODE_EXPIRE_TIME * 60 * 1000);
+        this.logger.log(`验证码已缓存: ${key}, 值: ${code}`);
+      }
+
+      // 将发送验证码的任务添加到队列
+      await this.queueService.addToEmailQueue('sendVerificationCode', {
+        to: email,
+        code,
+      });
+
+      this.logger.log(`验证码发送成功: ${email}, 验证码: ${code}`);
+      return ResultDto.success(null, '验证码发送成功');
+    } catch (error) {
+      this.logger.error(`验证码发送失败: ${error.message}`);
+      return ResultDto.fail('验证码发送失败', 500);
+    }
+  }
+
+  /**
+   * 校验邮箱验证码
+   * @param email 邮箱
+   * @param code 验证码
+   * @param type 平台类型
+   */
+  private async validateEmailCode(email: string, code: string, type: string): Promise<boolean> {
+    this.logger.log(`开始校验邮箱验证码: 邮箱=${email}, 验证码=${code}, 类型=${type}`);
+
+    // 尝试多个可能的键名格式
+    const possibleTypes = ['ConderView', 'ConderBlog', type, 'blog'];
+
+    for (const possibleType of possibleTypes) {
+      const key = `${this.EMAIL_CODE_PREFIX}${possibleType}:${email}`;
+      const cachedCode = await this.cacheManager.get<string>(key);
+
+      this.logger.log(`尝试验证码键: ${key}, 缓存值: ${cachedCode || '不存在'}`);
+
+      if (cachedCode && cachedCode === code) {
+        // 验证成功后删除缓存
+        await this.cacheManager.del(key);
+        this.logger.log(`验证码验证成功，已删除缓存: ${key}`);
+        return true;
+      }
+    }
+
+    this.logger.warn(`验证码错误或已过期: ${email}, 提交验证码: ${code}`);
+    return false;
+  }
+
+  /**
+   * 邮箱登录
+   * @param emailLoginDto 邮箱登录DTO
+   */
+  async emailLogin(emailLoginDto: EmailLoginDto): Promise<ResultDto<any>> {
+    const { email, code, type } = emailLoginDto;
+    this.logger.log(`邮箱登录请求: ${email}`);
+
+    try {
+      // 校验验证码
+      const isCodeValid = await this.validateEmailCode(email, code, type);
+      if (!isCodeValid) {
+        this.logger.warn(`邮箱验证码错误: ${email}, ${code}`);
+        throw new InternalServerErrorException('验证码错误或已过期');
+      }
+
+      // 查找用户
+      let user = await this.userService.findByEmail(email);
+
+      // 如果用户不存在，则自动注册
+      if (!user) {
+        this.logger.log(`用户不存在，自动注册: ${email}`);
+
+        // 生成随机密码
+        const randomPassword = randomBytes(16).toString('hex');
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+        // 创建用户
+        user = await this.userService.createUser({
+          username: email,
+          email: email,
+          password: hashedPassword,
+          nickname: email.split('@')[0],
+          loginType: 1, // 邮箱登录
+        });
+      }
+
+      // 检查用户状态
+      if (user.isDisable === 1) {
+        this.logger.warn(`账号已被禁用: ${email}`);
+        throw new InternalServerErrorException('账号已被禁用');
+      }
+
+      // 生成JWT令牌
+      const payload = { username: user.username, sub: user.id };
+      const token = this.jwtService.sign(payload);
+
+      // 获取用户角色
+      const roleList = await this.userService.getUserRoles(user.id);
+
+      // 组装用户信息
+      const userInfo = {
+        id: user.id,
+        username: user.username,
+        nickname: user.nickname || user.username,
+        avatar: user.avatar || '',
+        email: user.email,
+        roleList: roleList,
+        token: token,
+      };
+
+      this.logger.log(`邮箱登录成功: ${email}`);
+      return ResultDto.success(userInfo);
+    } catch (error) {
+      this.logger.error(`邮箱登录失败: ${error.message}`);
       return ResultDto.fail(error.message, error.status || 500);
     }
   }
 
   /**
-   * 登出
+   * 邮箱注册
+   * @param registerDto 邮箱注册DTO
    */
-  async logout(): Promise<ResultDto<null>> {
-    this.logger.log('用户登出');
-    // NestJS的JWT实现是无状态的，前端删除token即可
-    // 这里可以根据需要实现黑名单或额外的登出逻辑
-    return ResultDto.success(null, '退出成功');
+  async register(registerDto: RegisterDto): Promise<ResultDto<any>> {
+    // 兼容处理 - 支持email或username字段
+    const { username, email, password, code, type } = registerDto as any;
+    const emailToUse = email || username; // 优先使用email字段，如果没有则使用username
+
+    if (!emailToUse) {
+      throw new BadRequestException('邮箱不能为空');
+    }
+
+    const typeToUse = type || 'blog'; // 使用提供的type或默认为'blog'
+    this.logger.log(`用户注册请求: 邮箱=${emailToUse}, 验证码=${code}, 平台类型=${typeToUse}`);
+
+    try {
+      // 校验验证码 - 使用validateEmailCode方法确保一致性
+      const isCodeValid = await this.validateEmailCode(emailToUse, code, typeToUse);
+      if (!isCodeValid) {
+        throw new BadRequestException('验证码错误或已过期，请重新获取');
+      }
+
+      // 检查邮箱是否已注册
+      const existingUser = await this.userService.findByEmail(emailToUse);
+      if (existingUser) {
+        this.logger.warn(`邮箱已注册: ${emailToUse}`);
+        throw new BadRequestException('该邮箱已注册');
+      }
+
+      // 加密密码
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // 提取邮箱用户名作为昵称
+      const nickname = emailToUse.split('@')[0];
+
+      // 创建用户
+      const user = await this.userService.createUser({
+        username: emailToUse, // 使用邮箱作为用户名
+        email: emailToUse,
+        password: hashedPassword,
+        nickname: nickname,
+        loginType: 1, // 邮箱登录
+      });
+
+      // 分配角色 - 普通用户角色ID为3
+      try {
+        await this.userService.assignUserRole(user.id, 3);
+      } catch (e) {
+        this.logger.warn(`分配用户角色失败，可能角色ID不存在: ${e.message}`);
+      }
+
+      // 生成JWT令牌
+      const payload = { username: user.username, sub: user.id };
+      const token = this.jwtService.sign(payload);
+
+      // 获取用户角色
+      const roleList = await this.userService.getUserRoles(user.id);
+
+      // 组装用户信息
+      const userInfo = {
+        id: user.id,
+        username: user.username,
+        nickname: user.nickname || user.username,
+        avatar: user.avatar || '',
+        email: user.email,
+        roleList: roleList,
+        token: token,
+      };
+
+      this.logger.log(`用户注册成功: ${emailToUse}`);
+      return ResultDto.success(userInfo, '注册成功');
+    } catch (error) {
+      this.logger.error(`用户注册失败: ${error.message}`);
+      return ResultDto.fail(error.message);
+    }
   }
 }

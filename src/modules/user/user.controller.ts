@@ -1,19 +1,62 @@
-import { Controller, Get, Post, Body, Put, Param, UseGuards, Request, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Put,
+  UseGuards,
+  Request,
+  Req,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { MenuService } from './services/menu.service';
 import { User } from './entities/user.entity';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
 import { ResultDto } from '../../common/dtos/result.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 
 @ApiTags('用户管理')
-@Controller('users')
+@Controller('user')
 export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly menuService: MenuService,
   ) {}
+
+  /**
+   * 将数据库菜单格式转换为前端路由格式
+   */
+  private formatMenuTree(menu: any): any {
+    // 添加调试日志
+    console.log(`格式化菜单: ${menu.name} (ID=${menu.id}), is_hidden=${menu.hidden}`);
+
+    // 基本菜单项结构
+    const routerItem: any = {
+      name: menu.name,
+      path: menu.parentId === 0 ? `/${menu.path}` : menu.path,
+      component: menu.parentId === 0 ? 'Layout' : menu.component,
+      meta: {
+        title: menu.name,
+        icon: menu.icon,
+        // 直接使用数据库原始值确定是否隐藏
+        hidden: menu.hidden === true,
+      },
+    };
+
+    // 如果有子菜单
+    if (menu.children && menu.children.length > 0) {
+      routerItem.alwaysShow = true;
+      routerItem.redirect = 'noRedirect';
+      routerItem.children = menu.children.map((child) => this.formatMenuTree(child));
+    }
+
+    return routerItem;
+  }
 
   @Get('profile')
   @UseGuards(JwtAuthGuard)
@@ -22,18 +65,64 @@ export class UserController {
     return this.userService.findById(req.user.id);
   }
 
-  @Put(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  async update(@Param('id') id: number, @Body() user: Partial<User>) {
-    return this.userService.update(id, user);
-  }
-
   @Post('register')
   @ApiOperation({ summary: '用户注册' })
   @Public()
   async register(@Body() createUserDto: Partial<User>): Promise<User> {
     return this.userService.create(createUserDto);
+  }
+
+  /**
+   * 前台用户上传头像
+   * @param file 头像文件
+   * @param req 请求对象
+   */
+  @Post('avatar')
+  @ApiOperation({ summary: '上传用户头像' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: '头像文件',
+        },
+      },
+    },
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB限制
+      },
+      storage: memoryStorage(),
+    }),
+  )
+  async uploadAvatar(@UploadedFile() file: Express.Multer.File, @Request() req) {
+    console.log('收到用户头像上传请求，用户ID:', req.user.id);
+
+    if (!file) {
+      return ResultDto.fail('请选择要上传的头像');
+    }
+
+    // 检查文件格式
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      return ResultDto.fail('只允许上传jpg, png, gif, webp格式的图片');
+    }
+
+    try {
+      // 上传头像并更新用户信息
+      const avatarUrl = await this.userService.updateUserAvatar(req.user.id, file);
+      return ResultDto.success(avatarUrl, '头像上传成功');
+    } catch (error) {
+      console.error('上传头像失败:', error);
+      return ResultDto.fail('上传头像失败: ' + error.message);
+    }
   }
 
   @Get('getUserInfo')
@@ -59,12 +148,16 @@ export class UserController {
       const permissionList = await this.userService.getUserPermissions(userId);
       console.log('获取到权限数量:', permissionList.length);
 
+      console.log('获取到用户信息:', user);
+
       const userInfo = {
         id: user.id,
         username: user.username,
         nickname: user.nickname || user.username,
-        avatar: user.avatar || '',
+        avatar: user.avatar || 'http://img.conder.top/config/default_avatar.jpg',
         email: user.email || '',
+        webSite: user.webSite || '',
+        intro: user.intro || '',
         roleList: roleList.map((role) => role.roleLabel),
         permissionList,
       };
@@ -103,33 +196,33 @@ export class UserController {
   }
 
   /**
-   * 将数据库菜单格式转换为前端路由格式
+   * 更新当前登录用户信息
+   * @param user 用户信息
+   * @param req 请求对象
    */
-  private formatMenuTree(menu: any): any {
-    // 添加调试日志
-    console.log(`格式化菜单: ${menu.name} (ID=${menu.id}), is_hidden=${menu.hidden}`);
+  @Put('info')
+  @ApiOperation({ summary: '更新当前登录用户信息' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  async updateUserInfo(@Body() user: Partial<User>, @Request() req): Promise<ResultDto<any>> {
+    try {
+      // 从JWT令牌中获取用户ID
+      const userId = req.user.id;
+      console.log(`更新用户信息，用户ID: ${userId}，数据:`, user);
 
-    // 基本菜单项结构
-    const routerItem: any = {
-      name: menu.name,
-      path: menu.parentId === 0 ? `/${menu.path}` : menu.path,
-      component: menu.parentId === 0 ? 'Layout' : menu.component,
-      meta: {
-        title: menu.name,
-        icon: menu.icon,
-        // 直接使用数据库原始值确定是否隐藏
-        hidden: menu.hidden === true,
-      },
-    };
+      // 不允许更新敏感字段
+      delete user.password;
+      delete user.username;
+      delete user.id;
 
-    // 如果有子菜单
-    if (menu.children && menu.children.length > 0) {
-      routerItem.alwaysShow = true;
-      routerItem.redirect = 'noRedirect';
-      routerItem.children = menu.children.map((child) => this.formatMenuTree(child));
+      // 更新用户信息
+      const updatedUser = await this.userService.update(userId, user);
+
+      return ResultDto.success(updatedUser, '用户信息更新成功');
+    } catch (error) {
+      console.error('更新用户信息失败:', error);
+      return ResultDto.fail(`更新用户信息失败: ${error.message}`);
     }
-
-    return routerItem;
   }
 }
 

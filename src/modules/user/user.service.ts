@@ -7,6 +7,7 @@ import { UserRole } from './entities/user-role.entity';
 import { Menu } from './entities/menu.entity';
 import { RoleMenu } from './entities/role-menu.entity';
 import * as bcrypt from 'bcryptjs';
+import { UploadService } from '../upload/services/upload/upload.service';
 
 @Injectable()
 export class UserService {
@@ -21,6 +22,7 @@ export class UserService {
     private readonly menuRepository: Repository<Menu>,
     @InjectRepository(RoleMenu)
     private readonly roleMenuRepository: Repository<RoleMenu>,
+    private readonly uploadService: UploadService,
   ) {}
 
   /**
@@ -39,7 +41,26 @@ export class UserService {
   async findById(id: number): Promise<User> {
     return this.userRepository.findOne({
       where: { id },
-      select: ['id', 'username', 'nickname', 'avatar', 'email'],
+      select: ['id', 'username', 'nickname', 'avatar', 'email', 'webSite', 'intro'],
+    });
+  }
+
+  /**
+   * 根据邮箱查找用户
+   */
+  async findByEmail(email: string): Promise<User> {
+    return this.userRepository.findOne({
+      where: { email },
+      select: [
+        'id',
+        'username',
+        'password',
+        'nickname',
+        'avatar',
+        'email',
+        'isDisable',
+        'loginType',
+      ],
     });
   }
 
@@ -62,6 +83,46 @@ export class UserService {
     await this.addUserRole(savedUser.id);
 
     return savedUser;
+  }
+
+  /**
+   * 创建用户（用于邮箱注册）
+   */
+  async createUser(userData: {
+    username: string;
+    email: string;
+    password: string;
+    nickname: string;
+    loginType: number;
+  }): Promise<User> {
+    // 检查用户名是否存在
+    const existingUser = await this.userRepository.findOne({
+      where: [{ username: userData.username }, { email: userData.email }],
+    });
+
+    if (existingUser) {
+      throw new Error('用户名或邮箱已存在');
+    }
+
+    // 创建新用户
+    const newUser = this.userRepository.create({
+      username: userData.username,
+      email: userData.email,
+      password: userData.password, // 已经在AuthService中进行了加密处理
+      nickname: userData.nickname,
+      loginType: userData.loginType,
+      isDisable: 0, // 默认启用
+      createTime: new Date(), // 设置创建时间为当前时间
+      avatar: '', // 设置默认头像为空字符串
+    });
+
+    // 保存用户
+    const savedUser = await this.userRepository.save(newUser);
+
+    // 为新用户添加角色
+    await this.addUserRole(savedUser.id);
+
+    return this.findById(savedUser.id);
   }
 
   /**
@@ -311,5 +372,64 @@ export class UserService {
     });
 
     return result;
+  }
+
+  /**
+   * 为用户分配角色
+   * @param userId 用户ID
+   * @param roleId 角色ID
+   */
+  async assignUserRole(userId: number, roleId: number): Promise<void> {
+    try {
+      // 检查角色是否存在
+      const role = await this.roleRepository.findOne({ where: { id: roleId } });
+      if (!role) {
+        throw new Error(`角色ID ${roleId} 不存在`);
+      }
+
+      // 创建用户-角色关联
+      const userRole = new UserRole();
+      userRole.userId = userId;
+      userRole.roleId = roleId;
+
+      // 保存关联
+      await this.userRoleRepository.save(userRole);
+      console.log(`用户 ${userId} 已分配角色 ${roleId}`);
+    } catch (error) {
+      console.error('为用户分配角色时出错:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 更新用户头像
+   * @param userId 用户ID
+   * @param file 头像文件
+   * @returns 头像URL
+   */
+  async updateUserAvatar(userId: number, file: Express.Multer.File): Promise<string> {
+    console.log(`更新用户头像，用户ID: ${userId}`);
+
+    // 查询用户
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
+    try {
+      // 上传头像文件，使用avatar类型
+      const result = await this.uploadService.uploadFile(file, 'avatar');
+
+      // 更新用户头像
+      await this.userRepository.update(userId, { avatar: result.url });
+
+      console.log(`用户 ${userId} 头像更新成功: ${result.url}`);
+
+      // 返回新头像URL
+      return result.url;
+    } catch (error) {
+      console.error(`更新用户头像失败: ${error.message}`, error);
+      throw new Error(`更新头像失败: ${error.message}`);
+    }
   }
 }

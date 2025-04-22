@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { RequestInterceptor } from './common/interceptors/request.interceptor';
+import { TokenBlacklistGuard } from './common/guards/token-blacklist.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { BlogModule } from './modules/blog/blog.module';
@@ -69,6 +70,10 @@ import configuration from './config/configuration';
     {
       provide: APP_INTERCEPTOR,
       useClass: RequestInterceptor,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: TokenBlacklistGuard,
     },
   ],
 })

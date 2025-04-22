@@ -22,6 +22,7 @@ import {
   ApiBody,
   ApiConsumes,
 } from '@nestjs/swagger';
+import { Public } from '../../../common/decorators/public.decorator';
 import { CarouselService } from '../services/carousel.service';
 import { CreateCarouselDto, UpdateCarouselDto, CarouselQuery } from '../dto/carousel.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -37,7 +38,7 @@ import { memoryStorage } from 'multer';
 @Controller('carousel')
 export class CarouselController {
   constructor(private readonly carouselService: CarouselService) {}
-
+  @Public()
   @Get('list')
   @ApiOperation({ summary: '获取前台展示的轮播图列表' })
   @ApiResponse({ status: 200, description: '成功', type: [Carousel] })
@@ -76,6 +77,7 @@ export class AdminCarouselController {
   }
 
   @Get()
+  @Public()
   @ApiOperation({ summary: '获取轮播图列表' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async findAll(@Query() query: CarouselQuery) {
@@ -87,6 +89,7 @@ export class AdminCarouselController {
   }
 
   @Get('list')
+  @Public()
   @ApiOperation({ summary: '获取轮播图列表(适配前端)' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async findList(

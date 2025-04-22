@@ -1,4 +1,4 @@
-import { PrimaryGeneratedColumn, Column } from 'typeorm';
+import { PrimaryGeneratedColumn, Column, BeforeInsert } from 'typeorm';
 
 export abstract class BaseEntity {
   @PrimaryGeneratedColumn()
@@ -25,5 +25,10 @@ export abstract class BaseEntity {
 
   get updatedAt(): Date {
     return this.updateTime;
+  }
+
+  @BeforeInsert()
+  setCreateTime() {
+    this.createTime = new Date();
   }
 }

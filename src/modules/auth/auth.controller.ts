@@ -7,15 +7,18 @@ import {
   UseGuards,
   Request,
   Get,
+  Query,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { UserService } from '../user/user.service';
 import { ResultDto } from '../../common/dtos/result.dto';
 import { Logger } from '@nestjs/common';
+import { EmailLoginDto } from './dto/email-login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('认证')
 @Controller('auth')
@@ -35,12 +38,48 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
+  @Get('logout')
+  @ApiOperation({ summary: '用户登出' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  async logout(@Request() req) {
+    const token = req.headers.authorization?.split(' ')[1];
+    return this.authService.logout(token);
+  }
+
+  @Post('email/login')
+  @ApiOperation({ summary: '邮箱登录' })
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  async emailLogin(@Body() emailLoginDto: EmailLoginDto) {
+    return this.authService.emailLogin(emailLoginDto);
+  }
+
+  @Get('email/code')
+  @ApiOperation({ summary: '发送邮箱验证码' })
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiQuery({ name: 'email', required: true, description: '邮箱地址' })
+  async sendEmailCode(@Query('email') email: string) {
+    return this.authService.sendEmailCode({ email });
+  }
+
   @Get('profile')
   @ApiOperation({ summary: '获取当前用户信息' })
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   async getProfile(@Request() req) {
     return this.authService.getProfile(req.user.id);
+  }
+
+  @Post('register')
+  @ApiOperation({ summary: '用户注册' })
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  async register(@Body() registerDto: RegisterDto) {
+    this.logger.log(`收到注册请求: ${JSON.stringify(registerDto)}`);
+    return this.authService.register(registerDto);
   }
 }
 
@@ -69,12 +108,13 @@ export class AdminAuthController {
     return result;
   }
 
-  @Post('logout')
+  @Post('admin/logout')
   @ApiOperation({ summary: '管理员退出登录' })
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  async logout() {
-    return this.authService.logout();
+  async logout(@Request() req) {
+    const token = req.headers.authorization?.split(' ')[1];
+    return this.authService.adminLogout(token);
   }
 }

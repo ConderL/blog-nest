@@ -16,61 +16,61 @@ import { ArticleService } from '../services/article.service';
 export class CategorieController {
   constructor(
     private readonly categoryService: CategoryService,
-    private readonly articleService: ArticleService
+    private readonly articleService: ArticleService,
   ) {}
-  
+
   @Get('article')
   @ApiOperation({ summary: '根据分类ID查询文章列表' })
   @Public()
   async findArticlesByCategoryId(
     @Query('categorieId') categorieId: string,
     @Query('current') current: string = '1',
-    @Query('size') size: string = '10'
+    @Query('size') size: string = '10',
   ): Promise<any> {
     if (!categorieId) {
       return {
         flag: false,
         code: 400,
         msg: '分类ID不能为空',
-        data: null
+        data: null,
       };
     }
-    
+
     const category = await this.categoryService.findById(+categorieId);
     const result = await this.articleService.findAll(
       +current,
       +size,
       undefined,
-      +categorieId,  // 这里使用分类ID
+      +categorieId, // 这里使用分类ID
       undefined,
       1, // 状态为已发布
-      0  // 未删除
+      0, // 未删除
     );
-    
+
     // 格式化文章数据，确保包含所需字段
-    const articles = result.recordList.map(article => ({
+    const articles = result.recordList.map((article) => ({
       id: article.id,
       articleCover: article.articleCover,
       articleTitle: article.articleTitle,
       category: {
         id: article.category?.id,
-        categoryName: article.category?.categoryName
+        categoryName: article.category?.categoryName,
       },
-      tagVOList: article.tags.map(tag => ({
+      tagVOList: article.tags.map((tag) => ({
         id: tag.id,
-        tagName: tag.tagName
+        tagName: tag.tagName,
       })),
-      createTime: article.createTime
+      createTime: article.createTime,
     }));
-    
+
     return {
       flag: true,
       code: 200,
       msg: '操作成功',
       data: {
         articleConditionVOList: articles,
-        name: category.categoryName
-      }
+        name: category.categoryName,
+      },
     };
   }
 }
@@ -79,9 +79,7 @@ export class CategorieController {
 @ApiTags('分类')
 @Controller('categories')
 export class CategoryController {
-  constructor(
-    private readonly categoryService: CategoryService
-  ) {}
+  constructor(private readonly categoryService: CategoryService) {}
 
   @Post()
   @ApiOperation({ summary: '创建分类' })
