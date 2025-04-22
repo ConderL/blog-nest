@@ -8,21 +8,13 @@ import {
   Param,
   Query,
   UseGuards,
-  Req,
   Put,
   UploadedFile,
   UseInterceptors,
   Res,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiQuery,
-  ApiBearerAuth,
-  ApiConsumes,
-  ApiBody,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { ArticleService } from '../services/article.service';
 import { ResultDto } from '../../../common/dtos/result.dto';
@@ -137,16 +129,6 @@ export class ArticleController {
     const result = await this.articleService.update(+id, article, tagIds);
     return ResultDto.success(result);
   }
-
-  @Delete(':id')
-  @ApiOperation({ summary: '删除文章' })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @OperationLog(OperationType.DELETE)
-  async remove(@Param('id') id: string): Promise<ResultDto<null>> {
-    await this.articleService.remove(+id);
-    return ResultDto.success(null);
-  }
 }
 
 // 后台文章管理控制器
@@ -224,7 +206,7 @@ export class AdminArticleController {
       }
 
       // 2. 根据标签名称列表获取标签ID列表
-      let tagIds = [];
+      const tagIds = [];
       if (articleData.tagNameList && articleData.tagNameList.length > 0) {
         // 查询数据库中已存在的标签
         for (const tagName of articleData.tagNameList) {
@@ -263,7 +245,7 @@ export class AdminArticleController {
   @ApiOperation({ summary: '删除文章' })
   @OperationLog(OperationType.DELETE)
   async deleteArticle(@Body() articleIdList: number[]): Promise<ResultDto<null>> {
-    await this.articleService.removeMultiple(articleIdList);
+    await this.articleService.remove(articleIdList);
     return ResultDto.success(null);
   }
 
@@ -433,7 +415,7 @@ export class ArchivesController {
   @Public()
   async findArchivesList(
     @Query('current') current: string = '1',
-    @Query('size') size: string = '10'
+    @Query('size') size: string = '10',
   ): Promise<any> {
     const result = await this.articleService.findAll(
       +current,
@@ -442,25 +424,25 @@ export class ArchivesController {
       undefined,
       undefined,
       1, // 状态为已发布
-      0  // 未删除
+      0, // 未删除
     );
-    
+
     // 仅保留需要的字段
-    const recordList = result.recordList.map(article => ({
+    const recordList = result.recordList.map((article) => ({
       id: article.id,
       articleTitle: article.articleTitle,
       articleCover: article.articleCover,
-      createTime: article.createTime
+      createTime: article.createTime,
     }));
-    
+
     return {
       flag: true,
       code: 200,
       msg: '操作成功',
       data: {
         recordList,
-        count: result.count
-      }
+        count: result.count,
+      },
     };
   }
 }

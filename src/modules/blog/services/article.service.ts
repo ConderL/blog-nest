@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Article } from '../entities/article.entity';
 import { Tag } from '../entities/tag.entity';
 import { CategoryService } from './category.service';
@@ -176,18 +176,7 @@ export class ArticleService {
   /**
    * 删除文章
    */
-  async remove(id: number): Promise<void> {
-    const article = await this.articleRepository.findOne({ where: { id } });
-    if (!article) {
-      throw new NotFoundException(`文章ID ${id} 不存在`);
-    }
-    await this.articleRepository.remove(article);
-  }
-
-  /**
-   * 批量删除文章
-   */
-  async removeMultiple(ids: number[]): Promise<void> {
+  async remove(ids: number[]): Promise<void> {
     if (!ids || ids.length === 0) {
       return;
     }

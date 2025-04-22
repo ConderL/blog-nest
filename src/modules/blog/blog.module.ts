@@ -5,6 +5,7 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { UploadModule } from '../upload/upload.module';
 import { CacheModule } from '@nestjs/cache-manager';
+import { UserModule } from '../user/user.module';
 
 // 实体
 import { Article } from './entities/article.entity';
@@ -46,6 +47,7 @@ import {
 } from './controllers/category.controller';
 import { TagController, AdminTagController } from './controllers/tag.controller';
 import { CommentController } from './controllers/comment.controller';
+import { AdminCommentController } from './controllers/admin-comment.controller';
 import { FileController } from './controllers/file.controller';
 import { FriendController } from './controllers/friend.controller';
 import {
@@ -56,6 +58,7 @@ import { VisitLogController } from './controllers/visit-log.controller';
 import { SearchController } from './controllers/search.controller';
 import { BlogInfoController } from './controllers/blog-info.controller';
 import { CarouselController, AdminCarouselController } from './controllers/carousel.controller';
+import { CommentReplyController } from './controllers/comment-reply.controller';
 
 // 拦截器
 import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interceptor';
@@ -93,6 +96,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     }),
     CacheModule.register(),
     UploadModule,
+    UserModule,
   ],
   controllers: [
     ArticleController,
@@ -104,6 +108,8 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     TagController,
     AdminTagController,
     CommentController,
+    AdminCommentController,
+    CommentReplyController,
     FileController,
     FriendController,
     SiteConfigController,

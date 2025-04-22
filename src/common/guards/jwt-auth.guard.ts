@@ -21,7 +21,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     '/articles',
     '/categories',
     '/tags',
-    '/comments',
+    '/comments/list',
     '/friends',
     '/site-config/frontend',
     '/search',

@@ -36,7 +36,7 @@ export class Comment extends BaseEntity {
    * 回复用户ID
    */
   @Column({ name: 'to_uid', nullable: true })
-  toUserId: number;
+  toUid: number;
 
   /**
    * 父评论ID
@@ -56,6 +56,12 @@ export class Comment extends BaseEntity {
    */
   @Column({ name: 'is_check', type: 'tinyint', width: 1, default: 1 })
   isReview: number;
+
+  /**
+   * 点赞数量
+   */
+  @Column({ name: 'like_count', default: 0 })
+  likeCount: number;
 
   /**
    * 文章
