@@ -169,6 +169,7 @@ CREATE TABLE `t_comment`  (
   `is_check` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否通过 (0否 1是)',
   `create_time` datetime(0) NOT NULL COMMENT '评论时间',
   `update_time` datetime(0) NULL DEFAULT NULL COMMENT '更新时间',
+  `like_count` int(0) NULL DEFAULT NULL COMMENT '点赞数量',
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '-------评论表' ROW_FORMAT = Dynamic;
 

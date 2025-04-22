@@ -15,6 +15,8 @@ import { UploadModule } from './modules/upload/upload.module';
 import { EmailModule } from './modules/email/email.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { CaptchaModule } from './modules/captcha/captcha.module';
+import { HttpModule, HttpService } from '@nestjs/axios';
+import { IpService } from './services/ip.service';
 
 import configuration from './config/configuration';
 
@@ -61,6 +63,10 @@ import configuration from './config/configuration';
     UserModule,
     BlogModule,
     CaptchaModule,
+    HttpModule.register({
+      timeout: 5000,
+      maxRedirects: 5,
+    }),
   ],
   providers: [
     {
@@ -75,6 +81,15 @@ import configuration from './config/configuration';
       provide: APP_GUARD,
       useClass: TokenBlacklistGuard,
     },
+    {
+      provide: IpService,
+      useFactory: (httpService: HttpService, configService: ConfigService) => {
+        return new IpService(httpService, configService);
+      },
+      inject: [HttpService, ConfigService],
+    },
   ],
+  controllers: [],
+  exports: [IpService],
 })
 export class AppModule {}

@@ -6,6 +6,9 @@ import { extname } from 'path';
 import { UploadModule } from '../upload/upload.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { UserModule } from '../user/user.module';
+import { HttpModule, HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { IpService } from '../../services/ip.service';
 
 // 实体
 import { Article } from './entities/article.entity';
@@ -20,6 +23,7 @@ import { VisitLog } from './entities/visit-log.entity';
 import { User } from '../user/entities/user.entity';
 import { Carousel } from './entities/carousel.entity';
 import { UploadFileEntity } from '../upload/entities/file.entity';
+import { Message } from './entities/message.entity';
 
 // 服务
 import { ArticleService } from './services/article.service';
@@ -33,6 +37,7 @@ import { VisitLogService } from './services/visit-log.service';
 import { SearchService } from './services/search.service';
 import { BlogInfoService } from './services/blog-info.service';
 import { CarouselService } from './services/carousel.service';
+import { MessageService } from './services/message.service';
 
 // 控制器
 import {
@@ -59,6 +64,8 @@ import { SearchController } from './controllers/search.controller';
 import { BlogInfoController } from './controllers/blog-info.controller';
 import { CarouselController, AdminCarouselController } from './controllers/carousel.controller';
 import { CommentReplyController } from './controllers/comment-reply.controller';
+import { MessageController } from './controllers/message.controller';
+import { AdminMessageController } from './controllers/admin-message.controller';
 
 // 拦截器
 import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interceptor';
@@ -82,6 +89,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
       User,
       Carousel,
       UploadFileEntity,
+      Message,
     ]),
     MulterModule.register({
       storage: diskStorage({
@@ -97,6 +105,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     CacheModule.register(),
     UploadModule,
     UserModule,
+    HttpModule,
   ],
   controllers: [
     ArticleController,
@@ -119,6 +128,8 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     BlogInfoController,
     CarouselController,
     AdminCarouselController,
+    MessageController,
+    AdminMessageController,
   ],
   providers: [
     ArticleService,
@@ -133,6 +144,14 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     BlogInfoService,
     CarouselService,
     VisitLogInterceptor,
+    MessageService,
+    {
+      provide: IpService,
+      useFactory: (httpService: HttpService, configService: ConfigService) => {
+        return new IpService(httpService, configService);
+      },
+      inject: [HttpService, ConfigService],
+    },
   ],
   exports: [
     ArticleService,
@@ -147,6 +166,8 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     BlogInfoService,
     CarouselService,
     VisitLogInterceptor,
+    MessageService,
+    IpService,
   ],
 })
 export class BlogModule {}
