@@ -5,6 +5,7 @@ import { Article } from '../entities/article.entity';
 import { Tag } from '../entities/tag.entity';
 import { CategoryService } from './category.service';
 import { TagService } from './tag.service';
+import { Comment } from '../entities/comment.entity';
 
 @Injectable()
 export class ArticleService {
@@ -15,6 +16,8 @@ export class ArticleService {
     private readonly tagRepository: Repository<Tag>,
     private readonly categoryService: CategoryService,
     private readonly tagService: TagService,
+    @InjectRepository(Comment)
+    private readonly commentRepository: Repository<Comment>,
   ) {}
 
   /**
@@ -181,9 +184,56 @@ export class ArticleService {
       return;
     }
 
-    const articles = await this.articleRepository.findBy({ id: In(ids) });
-    if (articles.length > 0) {
-      await this.articleRepository.remove(articles);
+    // 查找相关的评论并删除
+    try {
+      console.log(`准备删除文章ID为 ${ids.join(', ')} 的相关评论`);
+
+      // 批量查找关联评论更高效
+      const comments = await this.commentRepository.find({
+        where: {
+          typeId: In(ids),
+          commentType: 1, // 文章评论类型
+        },
+      });
+
+      if (comments.length > 0) {
+        console.log(`找到 ${comments.length} 条关联评论，准备删除`);
+
+        // 按文章ID分组记录评论数量，用于日志
+        const commentCountByArticle = comments.reduce((acc, comment) => {
+          acc[comment.typeId] = (acc[comment.typeId] || 0) + 1;
+          return acc;
+        }, {});
+
+        for (const [articleId, count] of Object.entries(commentCountByArticle)) {
+          console.log(`文章ID=${articleId} 有 ${count} 条评论将被删除`);
+        }
+
+        // 批量删除评论
+        await this.commentRepository.remove(comments);
+        console.log(`成功删除 ${comments.length} 条评论`);
+      } else {
+        console.log(`未找到与文章关联的评论，无需删除`);
+      }
+    } catch (error) {
+      console.error('删除文章相关评论失败，但将继续删除文章:', error);
+      // 错误被捕获但不抛出，允许继续执行文章删除
+    }
+
+    // 删除文章
+    try {
+      const articles = await this.articleRepository.findBy({ id: In(ids) });
+
+      if (articles.length > 0) {
+        console.log(`找到 ${articles.length} 篇文章，准备删除`);
+        await this.articleRepository.remove(articles);
+        console.log(`成功删除 ${articles.length} 篇文章`);
+      } else {
+        console.log(`未找到指定ID的文章，无需删除`);
+      }
+    } catch (error) {
+      console.error('删除文章失败:', error);
+      throw error; // 文章删除失败是关键错误，需要抛出
     }
   }
 
