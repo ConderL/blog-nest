@@ -272,4 +272,37 @@ export class ArticleService {
 
     await this.articleRepository.update(id, { isRecommend });
   }
+
+  /**
+   * 查询推荐文章列表
+   * @param page 当前页
+   * @param limit 每页条数
+   * @returns 推荐文章列表及总数
+   */
+  async findRecommendArticles(): Promise<Article[]> {
+    const qb = this.articleRepository
+      .createQueryBuilder('article')
+      .leftJoinAndSelect('article.category', 'category')
+      .leftJoinAndSelect('article.tags', 'tag')
+      .where('article.isDelete = :isDelete', { isDelete: 0 })
+      .andWhere('article.status = :status', { status: 1 }) // 只查询公开的文章
+      .andWhere('article.isRecommend = :isRecommend', { isRecommend: 1 }); // 只查询推荐的文章
+
+    // 排序: 置顶文章在前，然后按创建时间降序
+    qb.orderBy('article.isTop', 'DESC').addOrderBy('article.createTime', 'DESC');
+
+    const articles = await qb.getMany();
+
+    // 为每个文章添加tagVOList属性
+    const recordList = articles.map((article) => {
+      const articleObj = article as any;
+      articleObj.tagVOList = article.tags.map((tag) => ({
+        tagId: tag.id,
+        tagName: tag.tagName,
+      }));
+      return articleObj;
+    }) as Article[];
+
+    return recordList;
+  }
 }

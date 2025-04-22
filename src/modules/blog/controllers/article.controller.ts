@@ -96,6 +96,20 @@ export class ArticleController {
     return ResultDto.success(result);
   }
 
+  @ApiOperation({ summary: '获取推荐文章' })
+  @Get('recommend')
+  @Public()
+  async getRecommendArticles(): Promise<ResultDto<Article[]>> {
+    try {
+      // 设置isRecommend为1，查询推荐文章
+      const result = await this.articleService.findRecommendArticles();
+      return ResultDto.success(result);
+    } catch (error) {
+      console.error('获取推荐文章失败:', error);
+      return ResultDto.error('获取推荐文章失败');
+    }
+  }
+
   @ApiOperation({ summary: '查询文章详情' })
   @Get(':id')
   @Public()
