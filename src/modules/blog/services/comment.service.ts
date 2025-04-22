@@ -204,33 +204,6 @@ export class CommentService {
   }
 
   /**
-   * 递归查找子评论
-   * @param comment 当前评论
-   * @param allComments 所有评论
-   */
-  private findChildren(comment: Comment, allComments: Comment[]) {
-    // 初始化子评论数组
-    comment.children = [];
-
-    // 查找直接回复当前评论的评论
-    for (const childComment of allComments) {
-      if (childComment.parentId === comment.id) {
-        // 递归查找子评论的子评论
-        this.findChildren(childComment, allComments);
-        // 添加到当前评论的子评论数组
-        comment.children.push(childComment);
-      }
-    }
-
-    // 按ID排序，避免可能的日期问题
-    if (comment.children.length > 0) {
-      comment.children.sort((a, b) => b.id - a.id); // 降序排列，新评论在前
-    }
-
-    return comment;
-  }
-
-  /**
    * 后台查询评论列表 - 支持更多筛选条件
    */
   async findAllForAdmin(
@@ -276,24 +249,25 @@ export class CommentService {
 
   /**
    * 获取最新评论
-   * @returns 最新的一条评论
+   * @param limit 要获取的评论数量，默认为1
+   * @returns 最新评论列表
    */
-  async getRecentComments(): Promise<Comment> {
+  async getRecentComments(limit: number = 1): Promise<Comment[]> {
     try {
-      console.log('获取最新评论');
+      console.log(`获取最新${limit}条评论`);
 
-      // 查询最新的一条已审核评论
-      const comment = await this.commentRepository
+      // 查询最新的已审核评论
+      const comments = await this.commentRepository
         .createQueryBuilder('comment')
         .leftJoinAndSelect('comment.user', 'user')
         .leftJoinAndSelect('comment.article', 'article')
         .where('comment.isReview = :isReview', { isReview: 1 }) // 只获取已审核的评论
         .orderBy('comment.id', 'DESC') // 按ID倒序，获取最新评论
-        .take(1)
-        .getOne();
+        .take(limit)
+        .getMany();
 
-      console.log(`获取最新评论 ${comment ? '成功' : '无评论'}`);
-      return comment;
+      console.log(`获取最新评论成功，返回${comments.length}条评论`);
+      return comments;
     } catch (error) {
       console.error('获取最新评论失败:', error);
       throw error;

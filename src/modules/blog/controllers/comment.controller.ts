@@ -6,15 +6,11 @@ import { ResultDto } from '../../../common/dtos/result.dto';
 import { Comment } from '../entities/comment.entity';
 import { OperationLog } from '../../../common/decorators/operation-log.decorator';
 import { OperationType } from '../../../common/enums/operation-type.enum';
-import { UserService } from '../../../modules/user/user.service';
 
 @ApiTags('评论管理')
 @Controller('comments')
 export class CommentController {
-  constructor(
-    private readonly commentService: CommentService,
-    private readonly userService: UserService,
-  ) {}
+  constructor(private readonly commentService: CommentService) {}
 
   @Post('add')
   @ApiOperation({ summary: '创建评论' })
@@ -98,9 +94,9 @@ export class CommentController {
           // 如果有指定回复用户ID，查找被回复用户
           if (reply.toUid) {
             try {
-              const toUser = await this.userService.findById(reply.toUid);
+              const toUser = await this.commentService.findById(reply.toUid);
               if (toUser) {
-                toNickname = toUser.nickname || toUser.username || '未知用户';
+                toNickname = toUser.user?.nickname || toUser.user?.username || '未知用户';
               }
             } catch (error) {
               console.error(`获取被回复用户昵称失败，用户ID: ${reply.toUid}`, error);
@@ -158,37 +154,27 @@ export class CommentController {
   async getRecentComments(): Promise<ResultDto<any>> {
     try {
       console.log('接收到获取最新评论请求');
-      const comment = await this.commentService.getRecentComments();
+      const recentComments = await this.commentService.getRecentComments(5);
 
-      if (!comment) {
-        return ResultDto.success(null, '暂无评论');
+      if (!recentComments || recentComments.length === 0) {
+        return ResultDto.success([], '暂无评论');
       }
 
       // 格式化评论数据
-      const formattedComment = {
+      const formattedComments = recentComments.map((comment) => ({
         id: comment.id,
-        comment_content: comment.content,
-        create_time: comment.createTime,
-        from_uid: comment.userId,
-        type_id: comment.typeId,
-        comment_type: comment.commentType,
-        user: comment.user
-          ? {
-              id: comment.user.id,
-              nickname: comment.user.nickname || comment.user.username,
-              avatar: comment.user.avatar || '',
-            }
-          : null,
-        article: comment.article
-          ? {
-              id: comment.article.id,
-              article_title: comment.article.articleTitle || '未知文章',
-            }
-          : null,
-      };
+        commentContent: comment.content,
+        createTime: comment.createTime,
+        fromUid: comment.userId,
+        typeId: comment.typeId,
+        commentType: comment.commentType,
+        nickname: comment.user.nickname || comment.user.username,
+        avatar: comment.user.avatar || '',
+        articleTitle: comment.article.articleTitle || '未知文章',
+      }));
 
-      console.log('成功获取最新评论');
-      return ResultDto.success(formattedComment);
+      console.log(`成功获取最新评论，共${formattedComments.length}条`);
+      return ResultDto.success(formattedComments);
     } catch (error) {
       console.error('获取最新评论失败:', error);
       return ResultDto.fail('获取最新评论失败: ' + error.message);
