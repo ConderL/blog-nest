@@ -260,7 +260,7 @@ export class CommentService {
       const comments = await this.commentRepository
         .createQueryBuilder('comment')
         .leftJoinAndSelect('comment.user', 'user')
-        .leftJoinAndSelect('comment.article', 'article')
+        .leftJoinAndSelect('comment.article', 'article', 'comment.commentType = 1') // 只有文章评论才关联文章
         .where('comment.isReview = :isReview', { isReview: 1 }) // 只获取已审核的评论
         .orderBy('comment.id', 'DESC') // 按ID倒序，获取最新评论
         .take(limit)
@@ -382,6 +382,33 @@ export class CommentService {
     } catch (error) {
       console.error(`点赞评论失败, 评论ID: ${commentId}`, error);
       throw error;
+    }
+  }
+
+  /**
+   * 获取指定内容的评论数量
+   * @param typeId 内容ID
+   * @param commentType 评论类型 (1-文章评论,2-友链评论,3-说说评论)
+   * @returns 评论总数
+   */
+  async countCommentsByTypeAndId(typeId: number, commentType: number): Promise<number> {
+    try {
+      console.log(`获取内容评论数量, typeId=${typeId}, commentType=${commentType}`);
+
+      // 统计评论数量（包括顶级评论和子评论）
+      const count = await this.commentRepository.count({
+        where: {
+          typeId,
+          commentType,
+          isReview: 1, // 只统计已审核通过的评论
+        },
+      });
+
+      console.log(`内容ID=${typeId}, 类型=${commentType} 的评论数量: ${count}`);
+      return count;
+    } catch (error) {
+      console.error(`获取内容评论数量失败, typeId=${typeId}, commentType=${commentType}`, error);
+      return 0;
     }
   }
 }

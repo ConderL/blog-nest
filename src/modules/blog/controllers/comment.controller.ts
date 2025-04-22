@@ -6,6 +6,7 @@ import { ResultDto } from '../../../common/dtos/result.dto';
 import { Comment } from '../entities/comment.entity';
 import { OperationLog } from '../../../common/decorators/operation-log.decorator';
 import { OperationType } from '../../../common/enums/operation-type.enum';
+import { Public } from '../../../common/decorators/public.decorator';
 
 @ApiTags('评论管理')
 @Controller('comments')
@@ -151,6 +152,7 @@ export class CommentController {
    */
   @Get('recent')
   @ApiOperation({ summary: '获取最新评论' })
+  @Public()
   async getRecentComments(): Promise<ResultDto<any>> {
     try {
       console.log('接收到获取最新评论请求');
@@ -161,17 +163,39 @@ export class CommentController {
       }
 
       // 格式化评论数据
-      const formattedComments = recentComments.map((comment) => ({
-        id: comment.id,
-        commentContent: comment.content,
-        createTime: comment.createTime,
-        fromUid: comment.userId,
-        typeId: comment.typeId,
-        commentType: comment.commentType,
-        nickname: comment.user.nickname || comment.user.username,
-        avatar: comment.user.avatar || '',
-        articleTitle: comment.article.articleTitle || '未知文章',
-      }));
+      const formattedComments = recentComments.map((comment) => {
+        // 处理用户信息
+        const nickname = comment.user?.nickname || comment.user?.username || '匿名用户';
+        const avatar = comment.user?.avatar || '';
+
+        // 根据评论类型获取不同的标题
+        let articleTitle = '未知内容';
+        if (comment.commentType === 1 && comment.article) {
+          // 文章评论
+          articleTitle = comment.article.articleTitle || '未知文章';
+        } else if (comment.commentType === 2) {
+          // 友链评论
+          articleTitle = '友情链接';
+        } else if (comment.commentType === 3) {
+          // 说说评论
+          articleTitle = '说说';
+        } else if (comment.commentType === 4) {
+          // 留言评论
+          articleTitle = '留言板';
+        }
+
+        return {
+          id: comment.id,
+          commentContent: comment.content,
+          createTime: comment.createTime,
+          fromUid: comment.userId,
+          typeId: comment.typeId,
+          commentType: comment.commentType,
+          nickname,
+          avatar,
+          articleTitle,
+        };
+      });
 
       console.log(`成功获取最新评论，共${formattedComments.length}条`);
       return ResultDto.success(formattedComments);

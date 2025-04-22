@@ -104,7 +104,7 @@ export class BlogInfoService {
       // loginList: 'qq,gitee,github',
       loginList: '',
       isMusic: 1,
-      musicId: '691394551',
+      musicId: '13616943965',
       isChat: 1,
       websocketUrl: 'wss://www.conder.top/websocket/',
       archiveWallpaper: 'https://picture.qiuyu.wiki/config/4343ce0c8ea2d5389ec8dfb1643d562c.jpg',

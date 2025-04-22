@@ -24,6 +24,7 @@ import { User } from '../user/entities/user.entity';
 import { Carousel } from './entities/carousel.entity';
 import { UploadFileEntity } from '../upload/entities/file.entity';
 import { Message } from './entities/message.entity';
+import { Talk } from './entities/talk.entity';
 
 // 服务
 import { ArticleService } from './services/article.service';
@@ -38,6 +39,7 @@ import { SearchService } from './services/search.service';
 import { BlogInfoService } from './services/blog-info.service';
 import { CarouselService } from './services/carousel.service';
 import { MessageService } from './services/message.service';
+import { TalkService } from './services/talk.service';
 
 // 控制器
 import {
@@ -66,6 +68,7 @@ import { CarouselController, AdminCarouselController } from './controllers/carou
 import { CommentReplyController } from './controllers/comment-reply.controller';
 import { MessageController } from './controllers/message.controller';
 import { AdminMessageController } from './controllers/admin-message.controller';
+import { AdminTalkController, TalkController } from './controllers/admin-talk.controller';
 
 // 拦截器
 import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interceptor';
@@ -90,6 +93,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
       Carousel,
       UploadFileEntity,
       Message,
+      Talk,
     ]),
     MulterModule.register({
       storage: diskStorage({
@@ -130,6 +134,8 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     AdminCarouselController,
     MessageController,
     AdminMessageController,
+    AdminTalkController,
+    TalkController,
   ],
   providers: [
     ArticleService,
@@ -145,6 +151,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     CarouselService,
     VisitLogInterceptor,
     MessageService,
+    TalkService,
     {
       provide: IpService,
       useFactory: (httpService: HttpService, configService: ConfigService) => {
@@ -167,6 +174,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     CarouselService,
     VisitLogInterceptor,
     MessageService,
+    TalkService,
     IpService,
   ],
 })

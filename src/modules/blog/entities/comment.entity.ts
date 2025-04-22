@@ -1,7 +1,25 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  OneToMany,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
+import { User } from '../../../modules/user/entities/user.entity';
 import { Article } from './article.entity';
-import { User } from '../../user/entities/user.entity';
+
+/**
+ * 评论类型常量
+ */
+export enum CommentType {
+  ARTICLE = 1, // 文章评论
+  FRIEND = 2, // 友链评论
+  TALK = 3, // 说说评论
+  MESSAGE = 4, // 留言评论
+}
 
 /**
  * 评论实体
