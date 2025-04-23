@@ -1,75 +1,72 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SiteConfig } from '../entities/site-config.entity';
 
+/**
+ * 网站配置服务
+ */
 @Injectable()
 export class SiteConfigService {
+  private readonly logger = new Logger(SiteConfigService.name);
+
   constructor(
     @InjectRepository(SiteConfig)
     private readonly siteConfigRepository: Repository<SiteConfig>,
   ) {}
 
   /**
-   * 创建配置
+   * 获取网站配置列表
    */
-  async create(siteConfig: Partial<SiteConfig>): Promise<SiteConfig> {
-    const newConfig = this.siteConfigRepository.create(siteConfig);
-    return this.siteConfigRepository.save(newConfig);
+  async findAll(): Promise<SiteConfig[]> {
+    this.logger.log('获取网站配置列表');
+    return this.siteConfigRepository.find();
   }
 
   /**
-   * 更新配置
+   * 获取网站配置详情
+   * @param id 配置ID
+   */
+  async findById(id: number): Promise<SiteConfig> {
+    this.logger.log(`获取网站配置详情: id=${id}`);
+    return this.siteConfigRepository.findOne({ where: { id } });
+  }
+
+  /**
+   * 创建网站配置
+   * @param siteConfig 网站配置数据
+   */
+  async create(siteConfig: Partial<SiteConfig>): Promise<SiteConfig> {
+    this.logger.log(`创建网站配置: ${JSON.stringify(siteConfig)}`);
+    // 手动设置创建时间和更新时间
+    const now = new Date();
+    const newSiteConfig = this.siteConfigRepository.create({
+      ...siteConfig,
+      createTime: now,
+      updateTime: now,
+    });
+    return this.siteConfigRepository.save(newSiteConfig);
+  }
+
+  /**
+   * 更新网站配置
+   * @param id 配置ID
+   * @param siteConfig 网站配置数据
    */
   async update(id: number, siteConfig: Partial<SiteConfig>): Promise<SiteConfig> {
+    this.logger.log(`更新网站配置: id=${id}, ${JSON.stringify(siteConfig)}`);
+    // 更新时间
+    siteConfig.updateTime = new Date();
     await this.siteConfigRepository.update(id, siteConfig);
     return this.findById(id);
   }
 
   /**
-   * 删除配置
+   * 删除网站配置
+   * @param id 配置ID
    */
   async remove(id: number): Promise<void> {
+    this.logger.log(`删除网站配置: id=${id}`);
     await this.siteConfigRepository.delete(id);
-  }
-
-  /**
-   * 获取所有配置
-   */
-  async findAll(): Promise<SiteConfig[]> {
-    return this.siteConfigRepository.find();
-  }
-
-  /**
-   * 获取前端可见配置
-   */
-  async findFrontendConfigs(): Promise<SiteConfig[]> {
-    return this.siteConfigRepository.find({ where: { isFrontend: 1 } });
-  }
-
-  /**
-   * 根据ID获取配置
-   */
-  async findById(id: number): Promise<SiteConfig> {
-    return this.siteConfigRepository.findOne({ where: { id } });
-  }
-
-  /**
-   * 根据配置名获取配置
-   */
-  async findByName(configName: string): Promise<SiteConfig> {
-    return this.siteConfigRepository.findOne({ where: { configName } });
-  }
-
-  /**
-   * 批量更新配置
-   */
-  async updateBatch(configs: { name: string; value: string }[]): Promise<void> {
-    for (const config of configs) {
-      const existConfig = await this.findByName(config.name);
-      if (existConfig) {
-        await this.siteConfigRepository.update(existConfig.id, { configValue: config.value });
-      }
-    }
   }
 }

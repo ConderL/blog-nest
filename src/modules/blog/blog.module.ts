@@ -64,8 +64,9 @@ import { FriendController } from './controllers/friend.controller';
 import { AdminFriendController } from './controllers/admin-friend.controller';
 import {
   SiteConfigController,
-  AdminSiteConfigController,
+  AdminSiteConfigController as SiteImageController,
 } from './controllers/site-config.controller';
+import { AdminSiteConfigController } from './controllers/admin-site-config.controller';
 import { VisitLogController } from './controllers/visit-log.controller';
 import { SearchController } from './controllers/search.controller';
 import { BlogInfoController } from './controllers/blog-info.controller';
@@ -138,6 +139,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     FriendController,
     AdminFriendController,
     SiteConfigController,
+    SiteImageController,
     AdminSiteConfigController,
     VisitLogController,
     SearchController,

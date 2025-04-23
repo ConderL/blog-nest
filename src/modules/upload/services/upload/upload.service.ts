@@ -79,11 +79,13 @@ export class UploadService {
    * 上传文件
    * @param file 文件对象
    * @param type 文件类型（image, file, avatar）
+   * @param useDate 是否包含日期目录
    * @returns 上传结果
    */
   async uploadFile(
     file: Express.Multer.File,
     type = 'image',
+    useDate = true,
   ): Promise<{ url: string; path: string }> {
     try {
       // 计算文件MD5
@@ -108,13 +110,13 @@ export class UploadService {
         // 校验OSS配置是否完整
         if (!this.validateOssConfig()) {
           this.logger.warn('OSS配置不完整，将使用本地存储');
-          result = await this.uploadToLocal(file, type);
+          result = await this.uploadToLocal(file, type, useDate);
         } else {
-          result = await this.uploadToOSS(file, type);
+          result = await this.uploadToOSS(file, type, useDate);
         }
       } else {
         // 默认使用本地存储
-        result = await this.uploadToLocal(file, type);
+        result = await this.uploadToLocal(file, type, useDate);
       }
 
       // 保存文件信息到数据库
@@ -142,11 +144,13 @@ export class UploadService {
    * 本地上传
    * @param file 文件对象
    * @param type 文件类型
+   * @param useDate 是否包含日期目录
    * @returns 上传结果
    */
   private async uploadToLocal(
     file: Express.Multer.File,
     type: string,
+    useDate = true,
   ): Promise<{ url: string; path: string }> {
     try {
       this.logger.log('开始上传文件到本地服务器');
@@ -161,8 +165,10 @@ export class UploadService {
         directory = join(this.localPath, type);
       } else {
         // 其他类型按年月分类
-        const dateFolder = dayjs().format(this.DATE_FORMAT);
-        directory = join(this.localPath, type, dateFolder);
+        const dateFolder = useDate ? dayjs().format(this.DATE_FORMAT) : '';
+        directory = dateFolder
+          ? join(this.localPath, type, dateFolder)
+          : join(this.localPath, type);
       }
 
       // 确保目录存在
@@ -193,11 +199,13 @@ export class UploadService {
    * 上传至阿里云OSS
    * @param file 文件对象
    * @param type 文件类型
+   * @param useDate 是否包含日期目录
    * @returns 上传结果
    */
   private async uploadToOSS(
     file: Express.Multer.File,
     type: string,
+    useDate = true,
   ): Promise<{ url: string; path: string }> {
     try {
       this.logger.log('开始上传文件到阿里云OSS');
@@ -221,8 +229,8 @@ export class UploadService {
         ossPath = `${type}/${fileName}`;
       } else {
         // 其他类型按年月分类
-        const dateFolder = dayjs().format(this.DATE_FORMAT);
-        ossPath = `${type}/${dateFolder}/${fileName}`;
+        const dateFolder = useDate ? dayjs().format(this.DATE_FORMAT) : '';
+        ossPath = dateFolder ? `${type}/${dateFolder}/${fileName}` : `${type}/${fileName}`;
       }
 
       // 上传文件到OSS
@@ -255,7 +263,7 @@ export class UploadService {
       this.logger.error(`上传文件到OSS失败: ${error.message}`, error.stack);
       // 如果上传到OSS失败，则尝试上传到本地
       this.logger.warn('OSS上传失败，将使用本地存储');
-      return this.uploadToLocal(file, type);
+      return this.uploadToLocal(file, type, useDate);
     }
   }
 

@@ -58,7 +58,7 @@ export class SiteConfigController {
   @Get('frontend')
   @ApiOperation({ summary: '获取前端可见的配置' })
   async findFrontendConfigs(): Promise<SiteConfig[]> {
-    return this.siteConfigService.findFrontendConfigs();
+    return this.siteConfigService.findAll();
   }
 
   @Get(':id')
@@ -72,12 +72,25 @@ export class SiteConfigController {
   @ApiOperation({ summary: '批量更新配置' })
   @UseGuards(JwtAuthGuard)
   async updateBatch(@Body() configs: { name: string; value: string }[]): Promise<void> {
-    return this.siteConfigService.updateBatch(configs);
+    const configList = await this.siteConfigService.findAll();
+    if (configList.length === 0) {
+      return;
+    }
+
+    const configId = configList[0].id;
+
+    const updateData: Partial<SiteConfig> = {};
+    configs.forEach((config) => {
+      const key = config.name.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      updateData[key] = config.value;
+    });
+
+    await this.siteConfigService.update(configId, updateData);
   }
 }
 
 @ApiTags('站点配置')
-@Controller('admin/site')
+@Controller('admin/site-image')
 @UseGuards(JwtAuthGuard)
 export class AdminSiteConfigController {
   constructor(

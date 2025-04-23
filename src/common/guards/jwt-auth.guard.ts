@@ -3,7 +3,6 @@ import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { ResultDto } from '../dtos/result.dto';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -22,7 +21,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     '/categories',
     '/tags',
     '/comments/list',
-    '/friends',
+    '/friend',
+    '/message',
+    '/album',
     '/site-config/frontend',
     '/search',
     '/visit-logs',
