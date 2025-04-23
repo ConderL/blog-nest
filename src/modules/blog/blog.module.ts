@@ -61,6 +61,7 @@ import { CommentController } from './controllers/comment.controller';
 import { AdminCommentController } from './controllers/admin-comment.controller';
 import { FileController } from './controllers/file.controller';
 import { FriendController } from './controllers/friend.controller';
+import { AdminFriendController } from './controllers/admin-friend.controller';
 import {
   SiteConfigController,
   AdminSiteConfigController,
@@ -135,6 +136,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     CommentReplyController,
     FileController,
     FriendController,
+    AdminFriendController,
     SiteConfigController,
     AdminSiteConfigController,
     VisitLogController,

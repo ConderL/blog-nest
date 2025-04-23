@@ -23,7 +23,7 @@ async function bootstrap() {
     new ValidationPipe({
       transform: true, // 将输入数据类型转换为DTO类定义的类型
       whitelist: true, // 过滤掉未在DTO中定义的属性
-      forbidNonWhitelisted: true, // 如果存在未在DTO中定义的属性，则抛出错误
+      forbidNonWhitelisted: false, // 如果存在未在DTO中定义的属性，则抛出错误
       forbidUnknownValues: true, // 未知值会导致验证错误
     }),
   );

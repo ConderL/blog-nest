@@ -1,20 +1,34 @@
-import { Entity, Column } from 'typeorm';
-import { BaseEntity } from '../../../common/entities/base.entity';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('t_friend')
-export class Friend extends BaseEntity {
-  @Column({ name: 'link_name', length: 50 })
-  linkName: string;
+export class Friend {
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'link_avatar', nullable: true })
-  linkAvatar: string;
+  @Column({ name: 'name', length: 20 })
+  name: string;
 
-  @Column({ name: 'link_address', length: 100 })
-  linkAddress: string;
+  @Column({ name: 'color', length: 20 })
+  color: string;
 
-  @Column({ name: 'link_intro', length: 200, nullable: true })
-  linkIntro: string;
+  @Column({ name: 'avatar', length: 255 })
+  avatar: string;
 
-  @Column({ default: 1 })
-  status: number;
+  @Column({ name: 'url', length: 50 })
+  url: string;
+
+  @Column({ name: 'introduction', length: 100 })
+  introduction: string;
+
+  @CreateDateColumn({ name: 'create_time' })
+  createTime?: Date;
+
+  @UpdateDateColumn({ name: 'update_time', nullable: true })
+  updateTime?: Date;
 }
