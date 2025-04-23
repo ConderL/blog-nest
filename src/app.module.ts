@@ -17,6 +17,8 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { CaptchaModule } from './modules/captcha/captcha.module';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { IpService } from './services/ip.service';
+import { ChatModule } from './modules/chat/chat.module';
+import { ToolsModule } from './modules/tools/tools.module';
 
 import configuration from './config/configuration';
 
@@ -67,6 +69,8 @@ import configuration from './config/configuration';
       timeout: 5000,
       maxRedirects: 5,
     }),
+    ChatModule,
+    ToolsModule,
   ],
   providers: [
     {

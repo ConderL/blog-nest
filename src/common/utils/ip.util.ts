@@ -1,5 +1,7 @@
 import { Request } from 'express';
+import { Socket } from 'socket.io';
 import axios from 'axios';
+import { Logger } from '@nestjs/common';
 import { getCurrentRequest } from './request.util';
 
 /**
@@ -7,6 +9,8 @@ import { getCurrentRequest } from './request.util';
  * 提供IP地址相关的工具方法，如获取客户端IP、判断是否为内网IP等
  */
 export class IPUtil {
+  private static readonly logger = new Logger('IPUtil');
+
   /**
    * 获取客户端IP地址
    * @param request 请求对象
@@ -41,7 +45,54 @@ export class IPUtil {
       ip = ip.substring(7);
     }
 
+    // 格式化特殊地址
+    if (ip === '::1') {
+      ip = '127.0.0.1';
+    }
+
     return ip || '127.0.0.1';
+  }
+
+  /**
+   * 获取WebSocket客户端IP
+   * @param client Socket客户端
+   * @returns 客户端IP
+   */
+  static getSocketIp(client: Socket): string {
+    // 从Socket握手请求中获取
+    let address = '127.0.0.1';
+
+    try {
+      // 尝试从不同字段获取IP
+      if (client.handshake.headers['x-forwarded-for']) {
+        const forwardedIps = client.handshake.headers['x-forwarded-for'] as string;
+        address = forwardedIps.split(',')[0].trim();
+      } else if (client.handshake.headers['x-real-ip']) {
+        address = client.handshake.headers['x-real-ip'] as string;
+      } else if (client.handshake.address) {
+        address = client.handshake.address;
+      } else if (
+        client.request &&
+        client.request.connection &&
+        client.request.connection.remoteAddress
+      ) {
+        address = client.request.connection.remoteAddress;
+      }
+
+      // 清理IPv6前缀
+      if (address && address.indexOf('::ffff:') !== -1) {
+        address = address.substring(7);
+      }
+
+      // 格式化特殊地址
+      if (address === '::1') {
+        address = '127.0.0.1';
+      }
+    } catch (error) {
+      console.error('获取Socket IP失败:', error);
+    }
+
+    return address;
   }
 
   /**

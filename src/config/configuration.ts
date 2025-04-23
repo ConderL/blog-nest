@@ -106,4 +106,8 @@ export default () => ({
         parseInt(process.env.ELASTICSEARCH_CONNECTION_REQUEST_TIMEOUT, 10) || 5000,
     },
   },
+  baidu: {
+    apiKey: process.env.BAIDU_API_KEY || '',
+    secretKey: process.env.BAIDU_SECRET_KEY || '',
+  },
 });

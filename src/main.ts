@@ -15,7 +15,10 @@ import * as fs from 'fs';
 import * as express from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    cors: true, // 启用CORS支持
+    logger: ['error', 'warn', 'log', 'debug', 'verbose'], // 开启所有日志级别
+  });
   const logger = new Logger('Bootstrap');
 
   // 配置全局管道
@@ -97,8 +100,12 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('api-docs', app, document);
 
-  // 允许跨域
-  app.enableCors();
+  // 启用WebSocket
+  app.enableCors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    credentials: true,
+  });
 
   // 检查数据库是否已初始化
   const dataSource = app.get(DataSource);
