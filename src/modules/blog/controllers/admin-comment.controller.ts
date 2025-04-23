@@ -7,12 +7,15 @@ import { Comment } from '../entities/comment.entity';
 import { OperationLog } from '../../../common/decorators/operation-log.decorator';
 import { OperationType } from '../../../common/enums/operation-type.enum';
 import { UserService } from '../../../modules/user/user.service';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('后台评论管理')
 @Controller('admin/comment')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class AdminCommentController {
+  private readonly logger = new Logger(AdminCommentController.name);
+
   constructor(
     private readonly commentService: CommentService,
     private readonly userService: UserService,
@@ -28,7 +31,7 @@ export class AdminCommentController {
   @ApiQuery({ name: 'articleId', description: '文章ID', required: false, type: Number })
   @ApiQuery({ name: 'keyword', description: '搜索关键词', required: false, type: String })
   @ApiQuery({
-    name: 'isReview',
+    name: 'isCheck',
     description: '审核状态(0-未审核,1-已审核)',
     required: false,
     type: Number,
@@ -38,7 +41,7 @@ export class AdminCommentController {
     @Query('size') size = 10,
     @Query('articleId') articleId?: string,
     @Query('keyword') keyword?: string,
-    @Query('isReview') isReview?: string,
+    @Query('isCheck') isCheck?: string,
   ): Promise<ResultDto<{ recordList: any[]; count: number; pageCount: number }>> {
     // 转换与验证参数
     const currentPage = Number(current) || 1;
@@ -48,12 +51,12 @@ export class AdminCommentController {
     const articleIdNum = articleId ? Number(articleId) : null;
     const validArticleId = !isNaN(articleIdNum) ? articleIdNum : null;
 
-    // 只有当isReview是有效数字时才传递
-    const isReviewNum = isReview ? Number(isReview) : null;
-    const validIsReview = !isNaN(isReviewNum) ? isReviewNum : null;
+    // 只有当isCheck是有效数字时才传递
+    const isCheckNum = isCheck ? Number(isCheck) : null;
+    const validisCheck = !isNaN(isCheckNum) ? isCheckNum : null;
 
     console.log(
-      `获取评论列表：页码=${currentPage}, 每页=${pageSize}, 文章ID=${validArticleId}, 关键词=${keyword}, 审核状态=${validIsReview}`,
+      `获取评论列表：页码=${currentPage}, 每页=${pageSize}, 文章ID=${validArticleId}, 关键词=${keyword}, 审核状态=${validisCheck}`,
     );
 
     try {
@@ -62,7 +65,7 @@ export class AdminCommentController {
         pageSize,
         validArticleId,
         keyword,
-        validIsReview,
+        validisCheck,
       );
 
       // 处理评论数据，格式化为前端需要的格式
@@ -91,7 +94,7 @@ export class AdminCommentController {
           type_id: comment.typeId,
           comment_content: comment.content,
           create_time: comment.createTime,
-          is_check: comment.isReview,
+          is_check: comment.isCheck,
           parent_id: comment.parentId,
           reply_id: comment.replyId,
           to_uid: comment.toUid,
@@ -148,36 +151,46 @@ export class AdminCommentController {
   }
 
   /**
-   * 审核评论
-   */
-  @Put('review/:id')
-  @ApiOperation({ summary: '审核评论' })
-  @OperationLog(OperationType.UPDATE)
-  async review(
-    @Param('id') id: number,
-    @Body() reviewData: { is_check: number },
-  ): Promise<ResultDto<null>> {
-    try {
-      // 将前端传来的is_check映射到实体类的isReview字段
-      await this.commentService.update(id, { isReview: reviewData.is_check });
-      return ResultDto.success(null, '评论审核状态已更新');
-    } catch (error) {
-      return ResultDto.fail('更新评论审核状态失败: ' + error.message);
-    }
-  }
-
-  /**
    * 删除评论
    */
   @Delete('delete')
   @ApiOperation({ summary: '删除评论' })
   @OperationLog(OperationType.DELETE)
-  async remove(@Body() commentIdList: number[]): Promise<ResultDto<null>> {
+  async remove(@Body() idList: number[]): Promise<ResultDto<null>> {
     try {
-      await this.commentService.remove(commentIdList);
+      await this.commentService.remove(idList);
       return ResultDto.success(null, '评论已删除');
     } catch (error) {
       return ResultDto.fail('删除评论失败: ' + error.message);
+    }
+  }
+
+  /**
+   * 批量审核评论
+   */
+  @Put('pass')
+  @ApiOperation({ summary: '批量审核评论' })
+  @OperationLog(OperationType.UPDATE)
+  async batchReview(
+    @Body() reviewData: { idList: number[]; isCheck: number },
+  ): Promise<ResultDto<null>> {
+    try {
+      const { idList, isCheck } = reviewData;
+      if (!idList || idList.length === 0) {
+        return ResultDto.fail('评论ID列表不能为空');
+      }
+
+      this.logger.log(`批量审核评论，IDs: ${idList.join(', ')}, 状态: ${isCheck}`);
+
+      // 批量更新评论审核状态
+      for (const id of idList) {
+        await this.commentService.update(id, { isCheck });
+      }
+
+      return ResultDto.success(null, `${idList.length}条评论审核状态已更新`);
+    } catch (error) {
+      this.logger.error(`批量审核评论失败: ${error.message}`, error.stack);
+      return ResultDto.fail('批量更新评论审核状态失败: ' + error.message);
     }
   }
 }

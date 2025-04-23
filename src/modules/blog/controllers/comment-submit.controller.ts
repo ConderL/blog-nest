@@ -38,7 +38,7 @@ export class CommentSubmitController {
         parentId: createCommentDto.parentId || 0,
         replyId: createCommentDto.replyId || 0,
         userId: userId,
-        isReview: 1, // 默认已审核
+        isCheck: 1, // 默认已审核
       };
 
       console.log('构建的评论数据:', comment);

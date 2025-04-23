@@ -71,23 +71,13 @@ export class MessageController {
       };
 
       // 只查询审核通过的留言
-      const {
-        records,
-        // count, total
-      } = await this.messageService.findAll(
+      const { records } = await this.messageService.findAll(
         params.current,
         params.size,
-        undefined,
+        undefined, // 昵称参数为空
         1, // isCheck=1 表示只查询审核通过的留言
+        false, // showAll=false 表示不显示所有留言，只显示已审核的
       );
-
-      // return Result.ok({
-      //   recordList: records,
-      //   count,
-      //   total,
-      //   current: params.current,
-      //   size: params.size,
-      // });
 
       return Result.ok(records);
     } catch (error) {
@@ -146,7 +136,6 @@ export class MessageController {
         messageContent: messageData.messageContent,
         ipAddress,
         ipSource,
-        isCheck: 1, // 默认通过审核
       };
 
       // 保存留言

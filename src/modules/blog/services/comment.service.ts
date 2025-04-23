@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Comment } from '../entities/comment.entity';
+import { SiteConfig } from '../entities/site-config.entity';
 
 /**
  * 评论服务
@@ -12,6 +13,8 @@ export class CommentService {
   constructor(
     @InjectRepository(Comment)
     private commentRepository: Repository<Comment>,
+    @InjectRepository(SiteConfig)
+    private siteConfigRepository: Repository<SiteConfig>,
   ) {}
 
   /**
@@ -22,8 +25,21 @@ export class CommentService {
   async create(comment: Partial<Comment>): Promise<Comment> {
     try {
       console.log('创建评论:', comment);
-      // 创建新评论
-      const newComment = this.commentRepository.create(comment);
+
+      // 获取站点配置，读取评论审核开关
+      const [siteConfig] = await this.siteConfigRepository.find();
+
+      // 如果开启评论审核，则设置为未审核(0)，否则设置为已审核(1)
+      console.log(
+        `评论审核开关状态: ${siteConfig?.commentCheck ? '开启' : '关闭'}, 设置审核状态: ${siteConfig?.commentCheck}`,
+      );
+
+      // 创建新评论，设置审核状态
+      const newComment = this.commentRepository.create({
+        ...comment,
+        isCheck: siteConfig?.commentCheck ? 0 : 1,
+      });
+
       const savedComment = await this.commentRepository.save(newComment);
       console.log('评论创建成功, ID:', savedComment.id);
       return savedComment;
@@ -51,6 +67,7 @@ export class CommentService {
    * @param limit 每页条数
    * @param typeId 类型ID (如文章ID)
    * @param commentType 评论类型 (1-文章评论,2-友链评论,3-说说评论)
+   * @param showAll 是否显示所有评论(包括未审核的)，默认为false
    * @returns 评论列表和总数
    */
   async findAll(
@@ -58,10 +75,11 @@ export class CommentService {
     limit: number,
     typeId?: number | null,
     commentType?: number | null,
+    showAll: boolean = false,
   ): Promise<[Comment[], number]> {
     try {
       console.log(
-        `查询评论列表: page=${page}, limit=${limit}, typeId=${typeId}, commentType=${commentType}`,
+        `查询评论列表: page=${page}, limit=${limit}, typeId=${typeId}, commentType=${commentType}, showAll=${showAll}`,
       );
 
       const query = this.commentRepository
@@ -69,6 +87,11 @@ export class CommentService {
         .leftJoinAndSelect('comment.user', 'user')
         .leftJoinAndSelect('comment.article', 'article')
         .where('(comment.parentId IS NULL OR comment.parentId = 0)'); // 只查询顶级评论
+
+      // 如果不显示所有评论，则只显示已审核的评论
+      if (!showAll) {
+        query.andWhere('comment.isCheck = :isCheck', { isCheck: 1 });
+      }
 
       // 根据类型ID筛选
       if (typeId !== null && typeId !== undefined) {
@@ -98,18 +121,27 @@ export class CommentService {
   /**
    * 获取文章评论列表(含子评论)
    * @param articleId 文章ID
+   * @param showAll 是否显示所有评论(包括未审核的)，默认为false
    */
-  async findByArticleId(articleId: number): Promise<Comment[]> {
+  async findByArticleId(articleId: number, showAll: boolean = false): Promise<Comment[]> {
     try {
-      console.log(`获取文章评论列表, 文章ID: ${articleId}`);
+      console.log(`获取文章评论列表, 文章ID: ${articleId}, showAll: ${showAll}`);
+
+      // 构建查询条件
+      const whereCondition: any = {
+        typeId: articleId,
+        commentType: 1, // 文章评论类型
+        parentId: 0, // 只查询顶级评论
+      };
+
+      // 如果不显示所有评论，则只显示已审核的评论
+      if (!showAll) {
+        whereCondition.isCheck = 1;
+      }
 
       // 查询所有与该文章相关的评论
       const comments = await this.commentRepository.find({
-        where: {
-          typeId: articleId,
-          commentType: 1, // 文章评论类型
-          parentId: 0, // 只查询顶级评论
-        },
+        where: whereCondition,
         relations: ['user'],
         order: {
           id: 'DESC' as any, // 使用ID排序更可靠
@@ -120,11 +152,19 @@ export class CommentService {
 
       // 为每个顶级评论查询子评论
       for (const comment of comments) {
+        // 构建子评论查询条件
+        const replyWhereCondition: any = {
+          parentId: comment.id,
+        };
+
+        // 如果不显示所有评论，则只显示已审核的子评论
+        if (!showAll) {
+          replyWhereCondition.isCheck = 1;
+        }
+
         // 查询直接回复这个评论的子评论
         const replies = await this.commentRepository.find({
-          where: {
-            parentId: comment.id,
-          },
+          where: replyWhereCondition,
           relations: ['user'],
           order: {
             id: 'DESC' as any,
@@ -132,10 +172,11 @@ export class CommentService {
           take: 3, // 默认只取3条子评论，其他的通过单独API获取
         });
 
-        // 设置replyCount
+        // 设置replyCount (所有子评论，包括未审核的)
         const replyCount = await this.commentRepository.count({
           where: {
             parentId: comment.id,
+            ...(showAll ? {} : { isCheck: 1 }), // 如果不显示所有评论，则只计算已审核的子评论数量
           },
         });
 
@@ -211,7 +252,7 @@ export class CommentService {
     limit: number,
     articleId?: number,
     keyword?: string,
-    isReview?: number,
+    isCheck?: number,
   ): Promise<[Comment[], number]> {
     try {
       const queryBuilder = this.commentRepository
@@ -231,8 +272,8 @@ export class CommentService {
       }
 
       // 按审核状态筛选
-      if (isReview !== undefined && isReview !== null) {
-        queryBuilder.andWhere('comment.is_check = :isReview', { isReview });
+      if (isCheck !== undefined && isCheck !== null) {
+        queryBuilder.andWhere('comment.is_check = :isCheck', { isCheck });
       }
 
       // 返回结果，按id倒序排列
@@ -261,7 +302,7 @@ export class CommentService {
         .createQueryBuilder('comment')
         .leftJoinAndSelect('comment.user', 'user')
         .leftJoinAndSelect('comment.article', 'article', 'comment.commentType = 1') // 只有文章评论才关联文章
-        .where('comment.isReview = :isReview', { isReview: 1 }) // 只获取已审核的评论
+        .where('comment.isCheck = :isCheck', { isCheck: 1 }) // 只获取已审核的评论
         .orderBy('comment.id', 'DESC') // 按ID倒序，获取最新评论
         .take(limit)
         .getMany();
@@ -279,29 +320,42 @@ export class CommentService {
    * @param commentId 评论ID
    * @param page 页码
    * @param limit 每页条数
+   * @param showAll 是否显示所有回复(包括未审核的)，默认为false
    * @returns 回复列表
    */
-  async getReplies(commentId: number, page: number, limit: number): Promise<Comment[]> {
+  async getReplies(
+    commentId: number,
+    page: number,
+    limit: number,
+    showAll: boolean = false,
+  ): Promise<Comment[]> {
+    console.log(
+      `获取评论回复, 评论ID: ${commentId}, page: ${page}, limit: ${limit}, showAll: ${showAll}`,
+    );
     try {
-      console.log(`获取评论回复, commentId=${commentId}, page=${page}, limit=${limit}`);
+      // 构建查询条件
+      const whereCondition: any = {
+        parentId: commentId,
+      };
 
-      // 查询回复该评论的所有子评论
-      const replies = await this.commentRepository
-        .createQueryBuilder('comment')
-        .leftJoinAndSelect('comment.user', 'user')
-        .where('comment.parentId = :parentId', { parentId: commentId })
-        .orderBy('comment.id', 'DESC')
-        .skip((page - 1) * limit)
-        .take(limit)
-        .getMany();
-
-      console.log(`获取到${replies.length}条回复`);
-
-      // 打印关键字段检查
-      for (const reply of replies) {
-        console.log(`回复ID: ${reply.id}, 用户ID: ${reply.userId}, 被回复用户ID: ${reply.toUid}`);
+      // 如果不显示所有回复，则只显示已审核的回复
+      if (!showAll) {
+        whereCondition.isCheck = 1;
       }
 
+      // 查询该评论的所有回复
+      const replies = await this.commentRepository.find({
+        where: whereCondition,
+        relations: ['user'],
+        order: {
+          id: 'ASC' as any, // 按ID升序排列
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+
+      console.log(`评论回复数量: ${replies.length}`);
+      console.log(`查询字段: ${Object.keys(replies[0] || {}).join(', ')}`);
       return replies;
     } catch (error) {
       console.error('获取评论回复失败:', error);
@@ -400,7 +454,7 @@ export class CommentService {
         where: {
           typeId,
           commentType,
-          isReview: 1, // 只统计已审核通过的评论
+          isCheck: 1, // 只统计已审核通过的评论
         },
       });
 

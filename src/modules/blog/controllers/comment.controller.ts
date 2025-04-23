@@ -40,7 +40,6 @@ export class CommentController {
         replyId: createCommentDto.replyId || 0,
         toUid: createCommentDto.toUid || 0,
         userId: userId,
-        isReview: 1, // 默认已审核
       };
 
       console.log('构建的评论数据:', comment);
@@ -69,12 +68,21 @@ export class CommentController {
       // 处理评论类型
       const commentType = query.commentType !== undefined ? Number(query.commentType) : null;
 
+      // 前端API默认只显示已审核的评论
+      const showAll = false;
+
       console.log(
-        `获取评论列表: page=${page}, limit=${limit}, typeId=${typeId}, commentType=${commentType}`,
+        `获取评论列表: page=${page}, limit=${limit}, typeId=${typeId}, commentType=${commentType}, showAll=${showAll}`,
       );
 
       // 调用服务获取评论列表
-      const [comments, count] = await this.commentService.findAll(page, limit, typeId, commentType);
+      const [comments, count] = await this.commentService.findAll(
+        page,
+        limit,
+        typeId,
+        commentType,
+        showAll,
+      );
 
       // 格式化主评论
       const formattedComments = [];
@@ -82,7 +90,7 @@ export class CommentController {
       // 处理每条评论，获取其回复列表
       for (const comment of comments) {
         // 查询该评论的回复列表（限制3条）
-        const replies = await this.commentService.getReplies(comment.id, 1, 3);
+        const replies = await this.commentService.getReplies(comment.id, 1, 3, showAll);
         const replyCount = await this.commentService.getReplyCount(comment.id);
 
         // 格式化回复列表
@@ -156,14 +164,18 @@ export class CommentController {
   async getRecentComments(): Promise<ResultDto<any>> {
     try {
       console.log('接收到获取最新评论请求');
+      // 只获取已审核的最新评论
       const recentComments = await this.commentService.getRecentComments(5);
 
       if (!recentComments || recentComments.length === 0) {
         return ResultDto.success([], '暂无评论');
       }
 
+      // 只返回已审核的评论
+      const filteredComments = recentComments.filter((comment) => comment.isCheck === 1);
+
       // 格式化评论数据
-      const formattedComments = recentComments.map((comment) => {
+      const formattedComments = filteredComments.map((comment) => {
         // 处理用户信息
         const nickname = comment.user?.nickname || comment.user?.username || '匿名用户';
         const avatar = comment.user?.avatar || '';
@@ -214,7 +226,11 @@ export class CommentController {
   async getArticleComments(@Param('articleId') articleId: number): Promise<ResultDto<any[]>> {
     try {
       console.log(`获取文章评论树, 文章ID: ${articleId}`);
-      const comments = await this.commentService.findByArticleId(articleId);
+
+      // 默认只显示已审核的评论
+      const showAll = false;
+
+      const comments = await this.commentService.findByArticleId(articleId, showAll);
 
       // 转换为前端期望的格式
       const formattedComments = comments.map((comment) => {
@@ -262,10 +278,16 @@ export class CommentController {
   async findTree(@Param('articleId') articleId: string): Promise<ResultDto<any[]>> {
     try {
       console.log(`获取评论树, 文章ID: ${articleId}`);
+
+      // 根据评论服务实现，在findTree方法中添加过滤未审核评论的功能
+      // 因为我们已经修改了CommentService，所有查询默认都会过滤未审核的评论
       const comments = await this.commentService.findTree(+articleId);
 
+      // 进一步过滤未审核的评论
+      const approvedComments = comments.filter((comment) => comment.isCheck === 1);
+
       // 转换为前端期望的格式
-      const formattedComments = comments.map((comment) => {
+      const formattedComments = approvedComments.map((comment) => {
         // 子评论列表将通过另一个API获取
         return {
           id: comment.id,

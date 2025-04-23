@@ -73,7 +73,7 @@ export class Comment extends BaseEntity {
    * 0-未审核，1-已审核
    */
   @Column({ name: 'is_check', type: 'tinyint', width: 1, default: 1 })
-  isReview: number;
+  isCheck: number;
 
   /**
    * 点赞数量

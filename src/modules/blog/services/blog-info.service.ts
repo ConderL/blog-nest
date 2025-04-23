@@ -151,7 +151,7 @@ export class BlogInfoService {
     const articleCount = await this.articleRepository.count({ where: { isDelete: 0 } });
     const categoryCount = await this.categoryRepository.count();
     const tagCount = await this.tagRepository.count();
-    const commentCount = await this.commentRepository.count({ where: { isReview: 1 } });
+    const commentCount = await this.commentRepository.count({ where: { isCheck: 1 } });
     const userCount = await this.userRepository.count();
 
     // 获取文章统计数据

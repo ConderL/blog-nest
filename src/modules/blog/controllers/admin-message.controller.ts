@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Query, Param, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Query, Logger, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { MessageService } from '../services/message.service';
 import { Result } from '../../../common/result';
@@ -83,6 +83,7 @@ export class AdminMessageController {
         params.size,
         params.nickname,
         params.isCheck,
+        true,
       );
 
       return Result.ok({
@@ -114,10 +115,10 @@ export class AdminMessageController {
     },
   })
   @Delete('delete')
-  async remove(@Body() messageIdList: number[]) {
+  async remove(@Body() idList: number[]) {
     try {
-      this.logger.log(`删除留言: id=${messageIdList}`);
-      await this.messageService.remove(messageIdList);
+      this.logger.log(`删除留言: id=${idList}`);
+      await this.messageService.remove(idList);
       return Result.ok(null, '删除成功');
     } catch (error) {
       this.logger.error(`删除留言失败: ${error.message}`);
@@ -140,15 +141,41 @@ export class AdminMessageController {
       },
     },
   })
-  @Post('review')
-  async review(@Body() body: { id: number; isCheck: number }) {
+
+  /**
+   * 批量审核留言
+   */
+  @ApiOperation({ summary: '批量审核留言', description: '批量更新留言的审核状态' })
+  @ApiResponse({
+    status: 200,
+    description: '批量审核成功',
+    schema: {
+      example: {
+        code: 200,
+        message: '批量审核成功',
+        data: null,
+      },
+    },
+  })
+  @Put('pass')
+  async batchReview(@Body() body: { idList: number[]; isCheck: number }) {
     try {
-      this.logger.log(`审核留言: id=${body.id}, isCheck=${body.isCheck}`);
-      await this.messageService.updateStatus(body.id, body.isCheck);
-      return Result.ok(null, '审核成功');
+      const { idList, isCheck } = body;
+      if (!idList || idList.length === 0) {
+        return Result.fail('留言ID列表不能为空');
+      }
+
+      this.logger.log(`批量审核留言，IDs: ${idList.join(', ')}, 状态: ${isCheck}`);
+
+      // 批量更新留言审核状态
+      for (const id of idList) {
+        await this.messageService.updateStatus(id, isCheck);
+      }
+
+      return Result.ok(null, `${idList.length}条留言审核状态已更新`);
     } catch (error) {
-      this.logger.error(`审核留言失败: ${error.message}`);
-      return Result.fail('审核留言失败');
+      this.logger.error(`批量审核留言失败: ${error.message}`, error.stack);
+      return Result.fail('批量审核留言失败: ' + error.message);
     }
   }
 }

@@ -4,6 +4,7 @@ import { Repository, In } from 'typeorm';
 import { Message } from '../entities/message.entity';
 // import { CreateMessageDto } from '../dto/create-message.dto';
 import { ReviewMessageDto } from '../dto/review-message.dto';
+import { SiteConfig } from '../entities/site-config.entity';
 
 /**
  * 留言板服务
@@ -16,6 +17,8 @@ export class MessageService {
   constructor(
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
+    @InjectRepository(SiteConfig)
+    private readonly siteConfigRepository: Repository<SiteConfig>,
   ) {}
 
   /**
@@ -24,19 +27,30 @@ export class MessageService {
    * @param size 每页数量
    * @param nickname 昵称(可选)
    * @param isCheck 审核状态(可选)
+   * @param showAll 是否显示所有留言(包括未审核的)，默认为false
    * @returns 留言列表及分页信息
    */
-  async findAll(current: number, size: number, nickname?: string, isCheck?: number) {
-    this.logger.log(`查询留言列表：第${current}页，每页${size}条`);
+  async findAll(
+    current: number,
+    size: number,
+    nickname?: string,
+    isCheck?: number,
+    showAll: boolean = false,
+  ) {
+    this.logger.log(`查询留言列表：第${current}页，每页${size}条, showAll=${showAll}`);
     try {
       const queryBuilder = this.messageRepository.createQueryBuilder('message');
 
-      if (nickname) {
-        queryBuilder.andWhere('message.nickname LIKE :nickname', { nickname: `%${nickname}%` });
-      }
-
+      // 默认只显示已审核的留言，除非明确指定审核状态或要求显示所有留言
       if (isCheck !== undefined && !Number.isNaN(isCheck)) {
         queryBuilder.andWhere('message.isCheck = :isCheck', { isCheck });
+      } else if (!showAll) {
+        // 如果未指定审核状态且不显示所有留言，则只显示已审核的留言
+        queryBuilder.andWhere('message.isCheck = :isCheck', { isCheck: 1 });
+      }
+
+      if (nickname) {
+        queryBuilder.andWhere('message.nickname LIKE :nickname', { nickname: `%${nickname}%` });
       }
 
       // 按创建时间倒序排列
@@ -71,8 +85,17 @@ export class MessageService {
   async create(createMessageDto: any) {
     this.logger.log(`创建留言：${JSON.stringify(createMessageDto)}`);
     try {
+      // 获取站点配置，读取留言审核开关
+      const [siteConfig] = await this.siteConfigRepository.find();
+
+      // 如果开启留言审核，则设置为未审核(0)，否则设置为已审核(1)
+      this.logger.log(
+        `留言审核开关状态: ${siteConfig?.messageCheck ? '开启' : '关闭'}, 设置审核状态: ${siteConfig?.messageCheck}`,
+      );
+
       const message = this.messageRepository.create({
         ...createMessageDto,
+        isCheck: siteConfig?.messageCheck ? 0 : 1,
         createTime: new Date(),
         updateTime: new Date(),
       });

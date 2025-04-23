@@ -611,7 +611,7 @@ export class AuthService {
 
       // 分配角色 - 普通用户角色ID为3
       try {
-        await this.userService.assignUserRole(user.id, 3);
+        await this.userService.assignUserRole(user.id, 2);
       } catch (e) {
         this.logger.warn(`分配用户角色失败，可能角色ID不存在: ${e.message}`);
       }
