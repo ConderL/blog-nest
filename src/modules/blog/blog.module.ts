@@ -25,6 +25,8 @@ import { Carousel } from './entities/carousel.entity';
 import { UploadFileEntity } from '../upload/entities/file.entity';
 import { Message } from './entities/message.entity';
 import { Talk } from './entities/talk.entity';
+import { Album } from './entities/album.entity';
+import { Photo } from './entities/photo.entity';
 
 // 服务
 import { ArticleService } from './services/article.service';
@@ -40,6 +42,8 @@ import { BlogInfoService } from './services/blog-info.service';
 import { CarouselService } from './services/carousel.service';
 import { MessageService } from './services/message.service';
 import { TalkService } from './services/talk.service';
+import { AlbumService } from './services/album.service';
+import { PhotoService } from './services/photo.service';
 
 // 控制器
 import {
@@ -69,6 +73,10 @@ import { CommentReplyController } from './controllers/comment-reply.controller';
 import { MessageController } from './controllers/message.controller';
 import { AdminMessageController } from './controllers/admin-message.controller';
 import { AdminTalkController, TalkController } from './controllers/admin-talk.controller';
+import { AdminAlbumController } from './controllers/admin-album.controller';
+import { AlbumController } from './controllers/album.controller';
+import { PhotoController } from './controllers/photo.controller';
+import { AdminPhotoController } from './controllers/admin-photo.controller';
 
 // 拦截器
 import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interceptor';
@@ -94,6 +102,8 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
       UploadFileEntity,
       Message,
       Talk,
+      Album,
+      Photo,
     ]),
     MulterModule.register({
       storage: diskStorage({
@@ -136,6 +146,10 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     AdminMessageController,
     AdminTalkController,
     TalkController,
+    AdminAlbumController,
+    AlbumController,
+    PhotoController,
+    AdminPhotoController,
   ],
   providers: [
     ArticleService,
@@ -152,6 +166,8 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     VisitLogInterceptor,
     MessageService,
     TalkService,
+    AlbumService,
+    PhotoService,
     {
       provide: IpService,
       useFactory: (httpService: HttpService, configService: ConfigService) => {
@@ -175,6 +191,8 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     VisitLogInterceptor,
     MessageService,
     TalkService,
+    AlbumService,
+    PhotoService,
     IpService,
   ],
 })
