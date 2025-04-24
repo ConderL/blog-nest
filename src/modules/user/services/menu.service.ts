@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, Like } from 'typeorm';
 import { Menu } from '../entities/menu.entity';
 import { RoleMenu } from '../entities/role-menu.entity';
 
@@ -186,5 +186,15 @@ export class MenuService {
     console.log('MenuService.findTreeByRoleIds - 构建的菜单树数量:', tree.length);
 
     return tree;
+  }
+
+  /**
+   * 根据条件查询菜单列表
+   */
+  async findAllWithCondition(condition: any): Promise<Menu[]> {
+    return this.menuRepository.find({
+      where: condition,
+      order: { parentId: 'ASC', orderNum: 'ASC' },
+    });
   }
 }

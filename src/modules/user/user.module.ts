@@ -13,6 +13,7 @@ import { RoleService } from './services/role.service';
 import { MenuService } from './services/menu.service';
 import { RoleController } from './controllers/role.controller';
 import { MenuController } from './controllers/menu.controller';
+import { AdminMenuController } from './controllers/admin-menu.controller';
 import { UploadModule } from '../upload/upload.module';
 
 @Module({
@@ -28,7 +29,13 @@ import { UploadModule } from '../upload/upload.module';
     }),
     UploadModule,
   ],
-  controllers: [UserController, RoleController, MenuController, AdminUserController],
+  controllers: [
+    UserController,
+    RoleController,
+    MenuController,
+    AdminUserController,
+    AdminMenuController,
+  ],
   providers: [UserService, RoleService, MenuService],
   exports: [UserService, RoleService, MenuService],
 })
