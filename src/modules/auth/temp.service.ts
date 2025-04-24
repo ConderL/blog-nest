@@ -521,7 +521,7 @@ export class AuthService {
       });
 
       // 分配角色 - 角色ID为3
-      await this.userService.assignUserRole(user.id, 3);
+      await this.userService.assignUserRoles(user.id, [3]);
 
       // 生成JWT令牌
       const payload = { username: user.username, sub: user.id };

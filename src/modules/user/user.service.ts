@@ -375,28 +375,87 @@ export class UserService {
   }
 
   /**
+   * 获取用户角色列表选项
+   */
+  async getUserRoleOptions(): Promise<any[]> {
+    try {
+      // 查找所有可用的角色
+      const roles = await this.roleRepository.find({
+        where: { isDisable: 0 },
+        order: { createTime: 'DESC' },
+      });
+
+      // 格式化为前端需要的数据格式
+      return roles.map((role) => ({
+        id: role.id,
+        roleName: role.roleName,
+        roleLabel: role.roleName, // 使用roleName作为roleLabel
+      }));
+    } catch (error) {
+      console.error('获取角色选项失败:', error);
+      throw new Error('获取角色选项失败');
+    }
+  }
+
+  /**
    * 为用户分配角色
    * @param userId 用户ID
-   * @param roleId 角色ID
+   * @param roleIds 角色ID数组
    */
-  async assignUserRole(userId: number, roleId: number): Promise<void> {
+  async assignUserRoles(userId: number, roleIds: number[]): Promise<void> {
     try {
-      // 检查角色是否存在
-      const role = await this.roleRepository.findOne({ where: { id: roleId } });
-      if (!role) {
-        throw new Error(`角色ID ${roleId} 不存在`);
+      // 检查用户是否存在
+      const user = await this.findById(userId);
+      if (!user) {
+        throw new Error(`用户ID ${userId} 不存在`);
       }
 
-      // 创建用户-角色关联
-      const userRole = new UserRole();
-      userRole.userId = userId;
-      userRole.roleId = roleId;
+      console.log(`为用户ID ${userId} 分配角色: ${roleIds.join(',')}`);
 
-      // 保存关联
-      await this.userRoleRepository.save(userRole);
-      console.log(`用户 ${userId} 已分配角色 ${roleId}`);
+      // 删除用户当前所有角色
+      await this.userRoleRepository.delete({ userId });
+
+      // 如果没有角色要分配，直接返回
+      if (!roleIds || roleIds.length === 0) {
+        return;
+      }
+
+      // 添加新的用户角色关联
+      const userRoles = roleIds.map((roleId) =>
+        this.userRoleRepository.create({
+          userId,
+          roleId,
+        }),
+      );
+
+      // 保存用户角色关联
+      await this.userRoleRepository.save(userRoles);
+      console.log(`用户 ${userId} 的角色已更新`);
     } catch (error) {
-      console.error('为用户分配角色时出错:', error);
+      console.error('为用户分配角色失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询用户拥有的角色ID列表
+   * @param userId 用户ID
+   */
+  async getUserRoleIds(userId: number): Promise<number[]> {
+    try {
+      // 检查用户是否存在
+      const user = await this.findById(userId);
+      if (!user) {
+        throw new Error(`用户ID ${userId} 不存在`);
+      }
+
+      // 查询用户角色关联
+      const userRoles = await this.userRoleRepository.find({ where: { userId } });
+
+      // 返回角色ID列表
+      return userRoles.map((ur) => Number(ur.roleId));
+    } catch (error) {
+      console.error('获取用户角色ID列表失败:', error);
       throw error;
     }
   }
@@ -430,6 +489,133 @@ export class UserService {
     } catch (error) {
       console.error(`更新用户头像失败: ${error.message}`, error);
       throw new Error(`更新头像失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 修改用户状态（启用/禁用）
+   * @param userId 用户ID
+   * @param isDisable 是否禁用 (0启用 1禁用)
+   */
+  async changeUserStatus(userId: number, isDisable: number): Promise<void> {
+    try {
+      console.log(`修改用户状态，用户ID: ${userId}, 状态: ${isDisable}`);
+
+      // 检查用户是否存在
+      const user = await this.findById(userId);
+      if (!user) {
+        throw new Error(`用户ID ${userId} 不存在`);
+      }
+
+      // 如果是管理员用户，不允许禁用
+      if (user.username === 'admin' && isDisable === 1) {
+        throw new Error('不能禁用系统管理员账号');
+      }
+
+      // 更新用户状态
+      await this.userRepository.update(userId, { isDisable });
+      console.log(`用户 ${userId} 状态已更新为: ${isDisable === 1 ? '禁用' : '启用'}`);
+    } catch (error) {
+      console.error('修改用户状态失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 分页查询用户列表
+   * @param pageNum 当前页码
+   * @param pageSize 每页大小
+   * @param username 用户名（可选）
+   * @param nickname 昵称（可选）
+   * @param email 邮箱（可选）
+   * @param loginType 登录方式（可选）
+   * @param isDisable 是否禁用（可选）
+   */
+  async getUserList(
+    pageNum: number = 1,
+    pageSize: number = 10,
+    username?: string,
+    nickname?: string,
+    email?: string,
+    loginType?: number,
+    isDisable?: number,
+  ): Promise<{ recordList: any[]; total: number }> {
+    try {
+      console.log('查询用户列表，参数:', {
+        pageNum,
+        pageSize,
+        username,
+        nickname,
+        email,
+        loginType,
+        isDisable,
+      });
+
+      // 构建查询条件
+      const queryBuilder = this.userRepository.createQueryBuilder('user');
+
+      // 添加WHERE条件
+      if (username) {
+        queryBuilder.andWhere('user.username LIKE :username', { username: `%${username}%` });
+      }
+      if (nickname) {
+        queryBuilder.andWhere('user.nickname LIKE :nickname', { nickname: `%${nickname}%` });
+      }
+      if (email) {
+        queryBuilder.andWhere('user.email LIKE :email', { email: `%${email}%` });
+      }
+      if (loginType !== undefined) {
+        queryBuilder.andWhere('user.loginType = :loginType', { loginType });
+      }
+      if (isDisable !== undefined) {
+        queryBuilder.andWhere('user.isDisable = :isDisable', { isDisable });
+      }
+
+      // 设置排序
+      queryBuilder.orderBy('user.createTime', 'DESC');
+
+      // 获取总数
+      const total = await queryBuilder.getCount();
+
+      // 分页查询
+      const list = await queryBuilder
+        .skip((pageNum - 1) * pageSize)
+        .take(pageSize)
+        .select([
+          'user.id',
+          'user.username',
+          'user.nickname',
+          'user.avatar',
+          'user.email',
+          'user.webSite',
+          'user.intro',
+          'user.loginType',
+          'user.isDisable',
+          'user.ipAddress',
+          'user.ipSource',
+          'user.loginTime',
+          'user.createTime',
+          'user.updateTime',
+        ])
+        .getMany();
+
+      console.log(`查询到用户列表: ${list.length}条，总数: ${total}`);
+
+      // 格式化返回结果
+      const formattedList = list.map((user) => ({
+        ...user,
+        avatar: user.avatar || '',
+        webSite: user.webSite || '',
+        intro: user.intro || '',
+        email: user.email || '',
+        ipAddress: user.ipAddress || '',
+        ipSource: user.ipSource || '',
+      }));
+
+      return { recordList: formattedList, total };
+    } catch (error) {
+      console.error('获取用户列表失败:', error);
+      throw new Error('获取用户列表失败: ' + error.message);
     }
   }
 }

@@ -9,6 +9,7 @@ import {
   Req,
   UploadedFile,
   UseInterceptors,
+  Param,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { UserService } from './user.service';
@@ -19,6 +20,8 @@ import { Public } from '../../common/decorators/public.decorator';
 import { ResultDto } from '../../common/dtos/result.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { OperationLog } from '../../common/decorators/operation-log.decorator';
+import { OperationType } from '../../common/enums/operation-type.enum';
 
 @ApiTags('用户管理')
 @Controller('user')
@@ -224,6 +227,57 @@ export class UserController {
       return ResultDto.fail(`更新用户信息失败: ${error.message}`);
     }
   }
+
+  /**
+   * 查看用户角色选项
+   */
+  @Get('role')
+  @ApiOperation({ summary: '查看用户角色选项' })
+  @ApiBearerAuth()
+  async listUserRoleDTO(): Promise<ResultDto<any>> {
+    try {
+      const roleOptions = await this.userService.getUserRoleOptions();
+      return ResultDto.success(roleOptions);
+    } catch (error) {
+      console.error('获取角色选项失败:', error);
+      return ResultDto.fail('获取角色选项失败');
+    }
+  }
+
+  /**
+   * 获取用户角色ID列表
+   */
+  @Get('role/:userId')
+  @ApiOperation({ summary: '获取用户角色ID列表' })
+  @ApiBearerAuth()
+  async getUserRoleIds(@Param('userId') userId: number): Promise<ResultDto<number[]>> {
+    try {
+      const roleIds = await this.userService.getUserRoleIds(userId);
+      return ResultDto.success(roleIds);
+    } catch (error) {
+      console.error('获取用户角色ID列表失败:', error);
+      return ResultDto.fail('获取用户角色ID列表失败');
+    }
+  }
+
+  /**
+   * 分配用户角色
+   */
+  @Post('role')
+  @ApiOperation({ summary: '分配用户角色' })
+  @ApiBearerAuth()
+  @OperationLog(OperationType.GRANT)
+  async assignUserRoles(
+    @Body() data: { userId: number; roleIds: number[] },
+  ): Promise<ResultDto<null>> {
+    try {
+      await this.userService.assignUserRoles(data.userId, data.roleIds);
+      return ResultDto.success(null, '分配角色成功');
+    } catch (error) {
+      console.error('分配用户角色失败:', error);
+      return ResultDto.fail('分配用户角色失败: ' + error.message);
+    }
+  }
 }
 
 @ApiTags('后台用户管理')
@@ -234,6 +288,117 @@ export class AdminUserController {
     private readonly userService: UserService,
     private readonly menuService: MenuService,
   ) {}
+
+  /**
+   * 查询用户列表
+   */
+  @Get('list')
+  @ApiOperation({ summary: '查询用户列表' })
+  @ApiBearerAuth()
+  async getUserList(@Req() req: any): Promise<ResultDto<{ recordList: any[]; total: number }>> {
+    try {
+      // 从请求中获取查询参数
+      const pageNum = parseInt(req.query.pageNum, 10) || 1;
+      const pageSize = parseInt(req.query.pageSize, 10) || 10;
+      const { username, nickname, email, loginType, isDisable } = req.query;
+
+      console.log('查询用户列表，参数:', {
+        pageNum,
+        pageSize,
+        username,
+        nickname,
+        email,
+        loginType,
+        isDisable,
+      });
+
+      // 查询用户列表
+      const result = await this.userService.getUserList(
+        pageNum,
+        pageSize,
+        username,
+        nickname,
+        email,
+        loginType !== undefined ? parseInt(loginType, 10) : undefined,
+        isDisable !== undefined ? parseInt(isDisable, 10) : undefined,
+      );
+
+      return ResultDto.success(result);
+    } catch (error) {
+      console.error('查询用户列表失败:', error);
+      return ResultDto.fail('查询用户列表失败: ' + error.message);
+    }
+  }
+
+  /**
+   * 修改用户状态
+   */
+  @Put('changeStatus')
+  @ApiOperation({ summary: '修改用户状态' })
+  @ApiBearerAuth()
+  @OperationLog(OperationType.UPDATE)
+  async changeUserStatus(
+    @Body() data: { userId: number; isDisable: number },
+  ): Promise<ResultDto<null>> {
+    try {
+      await this.userService.changeUserStatus(data.userId, data.isDisable);
+      return ResultDto.success(null, '用户状态更新成功');
+    } catch (error) {
+      console.error('修改用户状态失败:', error);
+      return ResultDto.fail('修改用户状态失败: ' + error.message);
+    }
+  }
+
+  /**
+   * 查看用户角色选项
+   */
+  @Get('role')
+  @ApiOperation({ summary: '查看用户角色选项' })
+  @ApiBearerAuth()
+  async listUserRoleDTO(): Promise<ResultDto<any>> {
+    try {
+      const roleOptions = await this.userService.getUserRoleOptions();
+      return ResultDto.success(roleOptions);
+    } catch (error) {
+      console.error('获取角色选项失败:', error);
+      return ResultDto.fail('获取角色选项失败');
+    }
+  }
+
+  /**
+   * 获取用户角色ID列表
+   */
+  @Get('role/:userId')
+  @ApiOperation({ summary: '获取用户角色ID列表' })
+  @ApiBearerAuth()
+  async getUserRoleIds(@Param('userId') userId: number): Promise<ResultDto<number[]>> {
+    try {
+      const roleIds = await this.userService.getUserRoleIds(userId);
+      return ResultDto.success(roleIds);
+    } catch (error) {
+      console.error('获取用户角色ID列表失败:', error);
+      return ResultDto.fail('获取用户角色ID列表失败');
+    }
+  }
+
+  /**
+   * 分配用户角色
+   */
+  @Post('role')
+  @ApiOperation({ summary: '分配用户角色' })
+  @ApiBearerAuth()
+  @OperationLog(OperationType.GRANT)
+  async assignUserRoles(
+    @Body() data: { userId: number; roleIds: number[] },
+  ): Promise<ResultDto<null>> {
+    try {
+      await this.userService.assignUserRoles(data.userId, data.roleIds);
+      return ResultDto.success(null, '分配角色成功');
+    } catch (error) {
+      console.error('分配用户角色失败:', error);
+      return ResultDto.fail('分配用户角色失败: ' + error.message);
+    }
+  }
 
   @Get('getUserInfo')
   @ApiOperation({ summary: '获取当前登录用户信息' })

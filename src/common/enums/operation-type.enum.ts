@@ -12,5 +12,6 @@ export enum OperationType {
   CLEAR = '清空',
   LOGIN = '登录',
   LOGOUT = '登出',
+  GRANT = '授权',
   OTHER = '其他',
 }
