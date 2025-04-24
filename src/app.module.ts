@@ -25,6 +25,10 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { VisitLogInterceptor } from './common/interceptors/visit-log.interceptor';
 import { OperationLogInterceptor } from './common/interceptors/operation-log.interceptor';
+import {
+  AllExceptionsFilter,
+  HttpExceptionFilter,
+} from './common/exceptions/http.exception.filter';
 import { LogModule } from './modules/log/log.module';
 
 import configuration from './config/configuration';
@@ -112,6 +116,16 @@ import configuration from './config/configuration';
     {
       provide: APP_INTERCEPTOR,
       useClass: OperationLogInterceptor,
+    },
+    // 全局异常过滤器
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
+    // HTTP异常过滤器
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
     },
   ],
   exports: [IpService],

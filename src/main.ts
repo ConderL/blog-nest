@@ -52,9 +52,6 @@ async function bootstrap() {
   // 配置全局拦截器
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  // 配置全局异常过滤器
-  app.useGlobalFilters(new AllExceptionsFilter(), new HttpExceptionFilter());
-
   // 配置静态文件服务
   // 主目录
   app.useStaticAssets(join(__dirname, '..', 'public'), {

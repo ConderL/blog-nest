@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThan, In } from 'typeorm';
+import { Repository, Between, LessThan, In, Like } from 'typeorm';
 import { VisitLog } from './entities/visit-log.entity';
 import { OperationLog } from './entities/operation-log.entity';
 import * as moment from 'moment';
 import axios from 'axios';
+import { ExceptionLog } from './entities/exception-log.entity';
 
 @Injectable()
 export class LogService {
@@ -15,6 +16,8 @@ export class LogService {
     private readonly visitLogRepository: Repository<VisitLog>,
     @InjectRepository(OperationLog)
     private readonly operationLogRepository: Repository<OperationLog>,
+    @InjectRepository(ExceptionLog)
+    private readonly exceptionLogRepository: Repository<ExceptionLog>,
   ) {}
 
   /**
@@ -302,5 +305,166 @@ export class LogService {
     }
 
     return queryBuilder.getMany();
+  }
+
+  /**
+   * 记录异常日志
+   */
+  async recordException(data: {
+    module: string;
+    uri: string;
+    name: string;
+    description: string;
+    error_method: string;
+    message: string;
+    params: string;
+    request_method: string;
+    ip_address: string;
+    os: string;
+    browser: string;
+  }): Promise<ExceptionLog> {
+    try {
+      let ipSource = '';
+      if (data.ip_address) {
+        try {
+          ipSource = (await this.getIpSource(data.ip_address)) || '';
+        } catch (error) {
+          this.logger.error(`获取IP地理位置失败: ${error.message}`);
+        }
+      }
+
+      const exceptionLog = this.exceptionLogRepository.create({
+        module: data.module,
+        uri: data.uri,
+        name: data.name,
+        description: data.description,
+        error_method: data.error_method,
+        message: data.message,
+        params: data.params,
+        request_method: data.request_method,
+        ip_address: data.ip_address,
+        ip_source: ipSource,
+        os: data.os,
+        browser: data.browser,
+      });
+
+      return this.exceptionLogRepository.save(exceptionLog);
+    } catch (error) {
+      this.logger.error(`记录异常日志失败: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * 查询异常日志列表
+   * @param current 当前页
+   * @param size 每页大小
+   * @param keywords 搜索关键词
+   * @param startTime 开始时间
+   * @param endTime 结束时间
+   */
+  async findExceptionLogs(
+    current: number,
+    size: number,
+    keywords?: string,
+    startTime?: Date,
+    endTime?: Date,
+  ) {
+    try {
+      const queryBuilder = this.exceptionLogRepository.createQueryBuilder('exceptionLog');
+
+      // 关键词搜索
+      if (keywords) {
+        queryBuilder.andWhere(
+          '(exceptionLog.description LIKE :keywords OR exceptionLog.message LIKE :keywords OR exceptionLog.name LIKE :keywords)',
+          { keywords: `%${keywords}%` },
+        );
+      }
+
+      // 时间范围筛选
+      if (startTime && endTime) {
+        queryBuilder.andWhere('exceptionLog.createTime BETWEEN :startTime AND :endTime', {
+          startTime,
+          endTime,
+        });
+      } else if (startTime) {
+        queryBuilder.andWhere('exceptionLog.createTime >= :startTime', { startTime });
+      } else if (endTime) {
+        queryBuilder.andWhere('exceptionLog.createTime <= :endTime', { endTime });
+      }
+
+      // 按时间倒序排列
+      queryBuilder.orderBy('exceptionLog.createTime', 'DESC');
+
+      // 分页
+      const total = await queryBuilder.getCount();
+      const records = await queryBuilder
+        .skip((current - 1) * size)
+        .take(size)
+        .getMany();
+
+      return {
+        recordList: records,
+        current,
+        size,
+        total,
+      };
+    } catch (error) {
+      this.logger.error(`查询异常日志列表失败: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 根据ID删除异常日志
+   * @param ids 异常日志ID数组
+   */
+  async removeExceptionLogs(ids: number[]): Promise<void> {
+    this.logger.log(`删除异常日志，ID：${ids.join(',')}`);
+    try {
+      if (!ids || ids.length === 0) {
+        return;
+      }
+
+      // 查询要删除的记录
+      const logs = await this.exceptionLogRepository.findBy({ id: In(ids) });
+      if (logs.length > 0) {
+        // 执行删除
+        await this.exceptionLogRepository.remove(logs);
+        this.logger.log(`成功删除${logs.length}条异常日志`);
+      } else {
+        this.logger.log('未找到要删除的异常日志');
+      }
+    } catch (error) {
+      this.logger.error(`删除异常日志失败：${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 清空所有异常日志
+   */
+  async clearExceptionLogs(): Promise<any> {
+    this.logger.log('清空所有异常日志');
+    try {
+      // 直接使用delete方法删除所有记录
+      const result = await this.exceptionLogRepository.createQueryBuilder().delete().execute();
+
+      this.logger.log(`成功清空异常日志，影响行数：${result.affected}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`清空异常日志失败：${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取最近的异常日志
+   */
+  async getRecentExceptions(limit: number = 10): Promise<ExceptionLog[]> {
+    return this.exceptionLogRepository.find({
+      order: { createTime: 'DESC' } as any,
+      take: limit,
+    });
   }
 }
