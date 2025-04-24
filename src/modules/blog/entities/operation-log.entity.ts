@@ -1,11 +1,12 @@
 import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
-import { BaseEntity } from '../../../common/entities/base.entity';
 
 /**
- * 操作日志实体
+ * DEPRECATED: 已废弃的操作日志实体
+ * 请使用 log 模块中的 OperationLog 实体代替
+ * @deprecated 此实体已被废弃，请使用 src/modules/log/entities/operation-log.entity.ts
  */
 @Entity('t_operation_log')
-export class OperationLog extends BaseEntity {
+export class DeprecatedOperationLog {
   /**
    * 操作id
    */
@@ -89,4 +90,10 @@ export class OperationLog extends BaseEntity {
    */
   @Column()
   times: number;
+
+  /**
+   * 操作时间
+   */
+  @Column({ name: 'create_time' })
+  create_time: Date;
 }

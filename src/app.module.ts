@@ -19,6 +19,13 @@ import { HttpModule, HttpService } from '@nestjs/axios';
 import { IpService } from './services/ip.service';
 import { ChatModule } from './modules/chat/chat.module';
 import { ToolsModule } from './modules/tools/tools.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
+import { VisitLogInterceptor } from './common/interceptors/visit-log.interceptor';
+import { OperationLogInterceptor } from './common/interceptors/operation-log.interceptor';
+import { LogModule } from './modules/log/log.module';
 
 import configuration from './config/configuration';
 
@@ -40,19 +47,16 @@ import configuration from './config/configuration';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'mysql',
-        host: configService.get('database.host', 'localhost'),
-        port: configService.get('database.port', 3306),
-        username: configService.get('database.username', 'root'),
-        password: configService.get('database.password', 'root'),
-        database: configService.get('database.database', 'blog'),
+        host: configService.get('DB_HOST', 'localhost'),
+        port: configService.get<number>('DB_PORT', 3306),
+        username: configService.get('DB_USERNAME', 'root'),
+        password: configService.get('DB_PASSWORD', 'root'),
+        database: configService.get('DB_DATABASE', 'blog'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: false,
-        extra: {
-          charset: 'utf8mb4',
-        },
+        synchronize: configService.get<boolean>('DB_SYNCHRONIZE', false),
+        logging: configService.get<boolean>('DB_LOGGING', false),
+        timezone: '+08:00',
         charset: 'utf8mb4',
-        collation: 'utf8mb4_unicode_ci',
-        // logging: process.env.NODE_ENV !== 'production',
       }),
     }),
     // 业务模块
@@ -71,8 +75,15 @@ import configuration from './config/configuration';
     }),
     ChatModule,
     ToolsModule,
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'public'),
+      exclude: ['/api*'],
+    }),
+    LogModule,
   ],
+  controllers: [AppController],
   providers: [
+    AppService,
     {
       provide: APP_INTERCEPTOR,
       useClass: TransformInterceptor,
@@ -92,8 +103,17 @@ import configuration from './config/configuration';
       },
       inject: [HttpService, ConfigService],
     },
+    // 全局日志拦截器
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: VisitLogInterceptor,
+    },
+    // 全局操作日志拦截器
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: OperationLogInterceptor,
+    },
   ],
-  controllers: [],
   exports: [IpService],
 })
 export class AppModule {}

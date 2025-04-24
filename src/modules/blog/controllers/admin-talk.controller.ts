@@ -6,6 +6,8 @@ import { Auth } from '../../../decorators/auth.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 import { CommentService } from '../services/comment.service';
 import { CommentType } from '../entities/comment.entity';
+import { OperationLog } from '../../../common/decorators/operation-log.decorator';
+import { OperationType } from '../../../common/enums/operation-type.enum';
 
 /**
  * 管理端说说控制器
@@ -130,6 +132,7 @@ export class AdminTalkController {
     },
   })
   @Post('add')
+  @OperationLog(OperationType.CREATE)
   async create(@Body() talkData: any, @Req() req: any) {
     try {
       this.logger.log(`发布说说: ${JSON.stringify(talkData)}`);
@@ -175,6 +178,7 @@ export class AdminTalkController {
     },
   })
   @Delete('delete')
+  @OperationLog(OperationType.DELETE)
   async remove(@Body() talkIdList: number[]) {
     try {
       this.logger.log(`删除说说: id=${talkIdList.join(',')}`);
@@ -202,6 +206,7 @@ export class AdminTalkController {
     },
   })
   @Post('top')
+  @OperationLog(OperationType.UPDATE)
   async updateTopStatus(@Body() body: { id: number; isTop: number }) {
     try {
       this.logger.log(`更新说说置顶状态: id=${body.id}, isTop=${body.isTop}`);

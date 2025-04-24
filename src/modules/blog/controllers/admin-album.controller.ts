@@ -26,6 +26,8 @@ import { Album } from '../entities/album.entity';
 import { UploadService } from '../../upload/services/upload/upload.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { OperationLog } from '../../../common/decorators/operation-log.decorator';
+import { OperationType } from '../../../common/enums/operation-type.enum';
 
 /**
  * 管理端相册控制器
@@ -138,6 +140,7 @@ export class AdminAlbumController {
     },
   })
   @Post('add')
+  @OperationLog(OperationType.CREATE)
   async create(@Body() albumData: Partial<Album>) {
     try {
       this.logger.log(`添加相册: ${JSON.stringify(albumData)}`);
@@ -165,6 +168,7 @@ export class AdminAlbumController {
     },
   })
   @Delete('delete/:id')
+  @OperationLog(OperationType.DELETE)
   async remove(@Param('id') id: string) {
     try {
       this.logger.log(`删除相册: id=${id}`);
@@ -200,6 +204,7 @@ export class AdminAlbumController {
     },
   })
   @Put('update')
+  @OperationLog(OperationType.UPDATE)
   async update(@Body() album: Partial<Album>) {
     try {
       const { id, ...updateData } = album;
@@ -280,6 +285,7 @@ export class AdminAlbumController {
   })
   @Post('upload')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @OperationLog(OperationType.UPLOAD)
   async uploadImage(@UploadedFile() file: Express.Multer.File) {
     try {
       if (!file) {

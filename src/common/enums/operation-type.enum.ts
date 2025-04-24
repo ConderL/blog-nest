@@ -5,7 +5,12 @@ export enum OperationType {
   QUERY = '查询',
   IMPORT = '导入',
   EXPORT = '导出',
-  OTHER = '其他',
+  UPLOAD = '上传',
+  DOWNLOAD = '下载',
+  PUBLISH = '发布',
+  UNPUBLISH = '下线',
+  CLEAR = '清空',
   LOGIN = '登录',
   LOGOUT = '登出',
+  OTHER = '其他',
 }

@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, ValidationError } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -28,6 +28,24 @@ async function bootstrap() {
       whitelist: true, // 过滤掉未在DTO中定义的属性
       forbidNonWhitelisted: false, // 如果存在未在DTO中定义的属性，则抛出错误
       forbidUnknownValues: true, // 未知值会导致验证错误
+      enableDebugMessages: true, // 启用详细调试信息
+      stopAtFirstError: false, // 收集所有错误而不是在第一个错误时停止
+      transformOptions: {
+        enableImplicitConversion: true, // 启用隐式转换
+        exposeDefaultValues: true, // 暴露默认值
+      },
+      // 自定义错误信息格式
+      exceptionFactory: (validationErrors: ValidationError[] = []) => {
+        const errors = validationErrors.map((error) => {
+          const constraints = error.constraints ? Object.values(error.constraints) : [];
+          const message = constraints.length > 0 ? constraints[0] : `${error.property}验证失败`;
+          return message;
+        });
+        // 记录详细验证错误信息
+        logger.debug(`验证错误: ${JSON.stringify(validationErrors, null, 2)}`);
+        logger.debug(`原始请求数据: ${JSON.stringify(validationErrors[0]?.target, null, 2)}`);
+        return new Error(errors.join(', '));
+      },
     }),
   );
 
@@ -37,46 +55,43 @@ async function bootstrap() {
   // 配置全局异常过滤器
   app.useGlobalFilters(new AllExceptionsFilter(), new HttpExceptionFilter());
 
-  // 使用Express原生方式提供静态文件
-  app.use(
-    '/uploads',
-    express.static(join(__dirname, '..', 'public', 'uploads'), {
-      index: false,
-      setHeaders: (res, path) => {
-        console.log('提供静态文件:', path);
-        // 设置适当的Content-Type和缓存控制
-        if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
-          res.setHeader('Content-Type', 'image/jpeg');
-        } else if (path.endsWith('.png')) {
-          res.setHeader('Content-Type', 'image/png');
-        } else if (path.endsWith('.gif')) {
-          res.setHeader('Content-Type', 'image/gif');
-        } else if (path.endsWith('.webp')) {
-          res.setHeader('Content-Type', 'image/webp');
-        }
-        res.setHeader('Cache-Control', 'public, max-age=2592000'); // 30天
-      },
-    }),
-  );
+  // 配置静态文件服务
+  // 主目录
+  app.useStaticAssets(join(__dirname, '..', 'public'), {
+    prefix: '/',
+    setHeaders: (res, path) => {
+      // 为静态文件设置正确的字符集
+      if (path.endsWith('.html')) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      } else if (path.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+      } else if (path.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      }
 
-  // 常规静态文件
-  app.use(
-    express.static(join(__dirname, '..', 'public'), {
-      index: false,
-      setHeaders: (res, path) => {
-        // 为静态文件设置正确的字符集
-        if (path.endsWith('.html')) {
-          res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        } else if (path.endsWith('.css')) {
-          res.setHeader('Content-Type', 'text/css; charset=utf-8');
-        } else if (path.endsWith('.js')) {
-          res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-        }
-        // 设置缓存控制
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-      },
-    }),
-  );
+      // 设置缓存控制
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    },
+  });
+
+  // 专门为上传文件配置路由
+  app.useStaticAssets(join(__dirname, '..', 'public', 'uploads'), {
+    prefix: '/uploads/',
+    setHeaders: (res, path) => {
+      // 为图片类型文件设置适当的Content-Type
+      if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+        res.setHeader('Content-Type', 'image/jpeg');
+      } else if (path.endsWith('.png')) {
+        res.setHeader('Content-Type', 'image/png');
+      } else if (path.endsWith('.gif')) {
+        res.setHeader('Content-Type', 'image/gif');
+      } else if (path.endsWith('.webp')) {
+        res.setHeader('Content-Type', 'image/webp');
+      }
+      // 设置适当的缓存策略
+      res.setHeader('Cache-Control', 'public, max-age=2592000'); // 30天
+    },
+  });
 
   // 添加中间件处理预检
   app.use((req, res, next) => {

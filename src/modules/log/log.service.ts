@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThan } from 'typeorm';
+import { Repository, Between, LessThan, In } from 'typeorm';
 import { VisitLog } from './entities/visit-log.entity';
 import { OperationLog } from './entities/operation-log.entity';
 import * as moment from 'moment';
@@ -85,18 +85,18 @@ export class LogService {
    */
   async recordOperation(data: {
     userId?: number;
-    username?: string;
+    nickname?: string;
     type: string;
     module?: string;
     description?: string;
     method?: string;
-    path?: string;
+    uri?: string;
+    name?: string;
     params?: string;
     ip?: string;
     userAgent?: string;
-    result?: string;
-    time?: number;
-    status?: number;
+    data?: string;
+    times?: number;
   }): Promise<OperationLog> {
     try {
       let ipSource = '';
@@ -109,20 +109,19 @@ export class LogService {
       }
 
       const operationLog = this.operationLogRepository.create({
-        userId: data.userId,
-        username: data.username,
+        user_id: data.userId,
+        nickname: data.nickname,
         type: data.type,
         module: data.module,
         description: data.description,
         method: data.method,
-        path: data.path,
+        uri: data.uri || '',
+        name: data.name || '',
         params: data.params,
-        ip: data.ip,
-        ipSource,
-        status: data.status ?? 1,
-        time: data.time,
-        result: data.result,
-        userAgent: data.userAgent,
+        ip_address: data.ip,
+        ip_source: ipSource,
+        data: data.data,
+        times: data.times,
       });
 
       return this.operationLogRepository.save(operationLog);
@@ -191,7 +190,7 @@ export class LogService {
    */
   async getRecentOperations(limit: number = 10): Promise<OperationLog[]> {
     return this.operationLogRepository.find({
-      order: { createdAt: 'DESC' } as any,
+      order: { createTime: 'DESC' } as any,
       take: limit,
     });
   }
@@ -245,5 +244,63 @@ export class LogService {
     });
 
     return hourlyData;
+  }
+
+  /**
+   * 根据ID删除操作日志
+   * @param ids 操作日志ID数组
+   */
+  async removeOperationLogs(ids: number[]): Promise<void> {
+    this.logger.log(`删除操作日志，ID：${ids.join(',')}`);
+    try {
+      if (!ids || ids.length === 0) {
+        return;
+      }
+
+      // 查询要删除的记录
+      const logs = await this.operationLogRepository.findBy({ id: In(ids) });
+      if (logs.length > 0) {
+        // 执行删除
+        await this.operationLogRepository.remove(logs);
+        this.logger.log(`成功删除${logs.length}条操作日志`);
+      } else {
+        this.logger.log('未找到要删除的操作日志');
+      }
+    } catch (error) {
+      this.logger.error(`删除操作日志失败：${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 清空所有操作日志
+   */
+  async clearOperationLogs(): Promise<any> {
+    this.logger.log('清空所有操作日志');
+    try {
+      // 直接使用delete方法删除所有记录
+      const result = await this.operationLogRepository.createQueryBuilder().delete().execute();
+
+      this.logger.log(`成功清空操作日志，影响行数：${result.affected}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`清空操作日志失败：${error.message}`);
+      throw error;
+    }
+  }
+
+  // 关键词搜索
+  async searchOperations(keywords: string): Promise<OperationLog[]> {
+    const queryBuilder = this.operationLogRepository.createQueryBuilder('operationLog');
+
+    // 关键词搜索
+    if (keywords) {
+      queryBuilder.andWhere(
+        '(operationLog.description LIKE :keywords OR operationLog.nickname LIKE :keywords)',
+        { keywords: `%${keywords}%` },
+      );
+    }
+
+    return queryBuilder.getMany();
   }
 }

@@ -26,6 +26,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { IsArray, IsNumber, IsNotEmpty, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
+import { OperationLog } from '../../../common/decorators/operation-log.decorator';
+import { OperationType } from '../../../common/enums/operation-type.enum';
 
 /**
  * 照片URL列表保存DTO
@@ -182,6 +184,7 @@ export class AdminPhotoController {
   })
   @Post('upload')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @OperationLog(OperationType.UPLOAD)
   async uploadPhoto(@UploadedFile() file: Express.Multer.File) {
     try {
       if (!file) {
@@ -251,6 +254,7 @@ export class AdminPhotoController {
     },
   })
   @Post('add')
+  @OperationLog(OperationType.CREATE)
   async addPhotos(@Body() photoDto: SavePhotoDto) {
     try {
       // DTO 验证已经由全局验证管道处理
@@ -301,6 +305,7 @@ export class AdminPhotoController {
     },
   })
   @Delete('delete')
+  @OperationLog(OperationType.DELETE)
   async remove(@Body() photoIds: number[]) {
     try {
       if (!photoIds || photoIds.length === 0) {

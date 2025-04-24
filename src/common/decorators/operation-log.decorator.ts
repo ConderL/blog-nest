@@ -1,5 +1,4 @@
 import { SetMetadata } from '@nestjs/common';
-import { OperationType } from '../enums/operation-type.enum';
 
 export const OPERATION_LOG_KEY = 'operation_log';
 
@@ -9,4 +8,4 @@ export const OPERATION_LOG_KEY = 'operation_log';
  * @param type 操作类型
  * @returns 装饰器
  */
-export const OperationLog = (type: OperationType) => SetMetadata(OPERATION_LOG_KEY, type);
+export const OperationLog = (type: string) => SetMetadata(OPERATION_LOG_KEY, type);

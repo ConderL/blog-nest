@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { MessageService } from '../services/message.service';
 import { Result } from '../../../common/result';
 import { Auth } from '../../../decorators/auth.decorator';
+import { OperationLog } from '../../../common/decorators/operation-log.decorator';
+import { OperationType } from '../../../common/enums/operation-type.enum';
 
 /**
  * 管理端留言控制器
@@ -115,6 +117,7 @@ export class AdminMessageController {
     },
   })
   @Delete('delete')
+  @OperationLog(OperationType.DELETE)
   async remove(@Body() idList: number[]) {
     try {
       this.logger.log(`删除留言: id=${idList}`);
@@ -158,6 +161,7 @@ export class AdminMessageController {
     },
   })
   @Put('pass')
+  @OperationLog(OperationType.UPDATE)
   async batchReview(@Body() body: { idList: number[]; isCheck: number }) {
     try {
       const { idList, isCheck } = body;

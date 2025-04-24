@@ -20,6 +20,8 @@ import { Type } from 'class-transformer';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { UploadService } from '../../../modules/upload/services/upload/upload.service';
+import { OperationLog } from '../../../common/decorators/operation-log.decorator';
+import { OperationType } from '../../../common/enums/operation-type.enum';
 
 /**
  * 更新网站配置DTO
@@ -290,6 +292,7 @@ export class AdminSiteConfigController {
     },
   })
   @Post('add')
+  @OperationLog(OperationType.CREATE)
   async create(@Body() createSiteConfigDto: UpdateSiteConfigDto) {
     try {
       this.logger.log(`创建网站配置: ${JSON.stringify(createSiteConfigDto)}`);
@@ -324,6 +327,7 @@ export class AdminSiteConfigController {
     },
   })
   @Put('update')
+  @OperationLog(OperationType.UPDATE)
   async update(@Body() updateSiteConfigDto: UpdateSiteConfigDto) {
     try {
       this.logger.log(`更新网站配置`);
@@ -391,6 +395,7 @@ export class AdminSiteConfigController {
     },
   })
   @Delete(':id')
+  @OperationLog(OperationType.DELETE)
   async remove(@Param('id') id: number) {
     try {
       this.logger.log(`删除网站配置: id=${id}`);
@@ -436,6 +441,7 @@ export class AdminSiteConfigController {
       storage: memoryStorage(), // 使用内存存储
     }),
   )
+  @OperationLog(OperationType.UPLOAD)
   async uploadImage(@UploadedFile() file: Express.Multer.File) {
     try {
       this.logger.log(`上传站点配置图片: ${file?.originalname || '未知文件'}`);

@@ -30,6 +30,8 @@ import { Carousel } from '../entities/carousel.entity';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from '../../../modules/upload/services/upload/upload.service';
 import { memoryStorage } from 'multer';
+import { OperationLog } from '../../../common/decorators/operation-log.decorator';
+import { OperationType } from '../../../common/enums/operation-type.enum';
 
 /**
  * 轮播图前台控制器
@@ -68,6 +70,7 @@ export class AdminCarouselController {
   @ApiOperation({ summary: '创建轮播图' })
   @ApiBody({ type: CreateCarouselDto })
   @ApiResponse({ status: 201, description: '创建成功', type: Carousel })
+  @OperationLog(OperationType.CREATE)
   async create(@Body() createCarouselDto: CreateCarouselDto) {
     return {
       code: 201,
@@ -136,6 +139,7 @@ export class AdminCarouselController {
       storage: memoryStorage(), // 使用内存存储
     }),
   )
+  @OperationLog(OperationType.UPLOAD)
   async uploadImage(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       return {
@@ -187,6 +191,7 @@ export class AdminCarouselController {
   @ApiOperation({ summary: '更新轮播图(适配前端)' })
   @ApiBody({ type: UpdateCarouselDto })
   @ApiResponse({ status: 200, description: '更新成功', type: Carousel })
+  @OperationLog(OperationType.UPDATE)
   async updateCarousel(
     @Body(
       new ValidationPipe({
@@ -224,6 +229,7 @@ export class AdminCarouselController {
   @ApiParam({ name: 'id', description: '轮播图ID' })
   @ApiBody({ type: UpdateCarouselDto })
   @ApiResponse({ status: 200, description: '更新成功', type: Carousel })
+  @OperationLog(OperationType.UPDATE)
   async update(@Param('id') id: string, @Body() updateCarouselDto: UpdateCarouselDto) {
     return {
       code: 200,
@@ -236,6 +242,7 @@ export class AdminCarouselController {
   @ApiOperation({ summary: '删除轮播图' })
   @ApiParam({ name: 'id', description: '轮播图ID' })
   @ApiResponse({ status: 200, description: '删除成功' })
+  @OperationLog(OperationType.DELETE)
   async remove(@Body() ids: number[]) {
     await this.carouselService.remove(ids);
     return {
@@ -249,6 +256,7 @@ export class AdminCarouselController {
   @ApiParam({ name: 'id', description: '轮播图ID' })
   @ApiBody({ schema: { properties: { status: { type: 'number' } } } })
   @ApiResponse({ status: 200, description: '更新成功', type: Carousel })
+  @OperationLog(OperationType.UPDATE)
   async updateStatus(@Param('id') id: string, @Body('status') status: number) {
     return {
       code: 200,

@@ -139,14 +139,14 @@ export class IPUtil {
    * @param ip IP地址
    * @returns IP地理位置信息
    */
-  static async getIpSource(ip: string): Promise<string> {
+  static async getIpLocation(ip: string): Promise<string> {
     // 如果是内网IP或本地IP，直接返回
     if (this.isInternalIp(ip) || ip === '127.0.0.1') {
       return '内网IP';
     }
 
     try {
-      // 使用ip-api.com免费API获取IP地理位置
+      // 使用IP地址查询API
       const response = await axios.get(`http://ip-api.com/json/${ip}?lang=zh-CN`);
       const data = response.data;
 
@@ -154,9 +154,44 @@ export class IPUtil {
         return `${data.country || ''} ${data.regionName || ''} ${data.city || ''}`;
       }
 
+      // 备用查询方法，如果第一个API不可用
+      return this.getIpSourceBackup(ip);
+    } catch (error) {
+      this.logger.error(`获取IP地址位置失败: ${error.message}`);
+
+      // 尝试备用方法
+      return this.getIpSourceBackup(ip);
+    }
+  }
+
+  /**
+   * 获取IP来源地
+   * 兼容性方法，作为 getIpLocation 的别名
+   * @param ip IP地址
+   * @returns IP地理位置信息
+   */
+  static async getIpSource(ip: string): Promise<string> {
+    return this.getIpLocation(ip);
+  }
+
+  /**
+   * 备用IP地址查询方法
+   * @param ip IP地址
+   * @returns IP地理位置信息
+   */
+  private static async getIpSourceBackup(ip: string): Promise<string> {
+    try {
+      // 使用备用API
+      const response = await axios.get(`https://ipapi.co/${ip}/json/`);
+      const data = response.data;
+
+      if (data && !data.error) {
+        return `${data.country_name || ''} ${data.region || ''} ${data.city || ''}`;
+      }
+
       return '未知位置';
     } catch (error) {
-      console.error('获取IP地址位置失败:', error);
+      this.logger.error(`备用IP查询也失败: ${error.message}`);
       return '未知位置';
     }
   }

@@ -17,6 +17,8 @@ import { Result } from '../../../common/result';
 import { Auth } from '../../../decorators/auth.decorator';
 import { IsNotEmpty, IsString, IsNumber, IsUrl } from 'class-validator';
 import { Type } from 'class-transformer';
+import { OperationLog } from '../../../common/decorators/operation-log.decorator';
+import { OperationType } from '../../../common/enums/operation-type.enum';
 
 /**
  * 创建友链DTO
@@ -209,6 +211,7 @@ export class AdminFriendController {
     },
   })
   @Post('add')
+  @OperationLog(OperationType.CREATE)
   async create(@Body() createFriendDto: CreateFriendDto) {
     try {
       this.logger.log(`添加友链: ${JSON.stringify(createFriendDto)}`);
@@ -247,6 +250,7 @@ export class AdminFriendController {
     },
   })
   @Put('update')
+  @OperationLog(OperationType.UPDATE)
   async update(@Body() updateFriendDto: UpdateFriendDto) {
     try {
       const { id } = updateFriendDto;
@@ -286,6 +290,7 @@ export class AdminFriendController {
     },
   })
   @Delete('delete')
+  @OperationLog(OperationType.DELETE)
   async remove(@Body() ids: number[]) {
     try {
       this.logger.log(`删除友链: ids=${ids}`);

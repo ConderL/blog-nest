@@ -10,6 +10,7 @@ import { HttpModule, HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { IpService } from '../../services/ip.service';
 import { ToolsModule } from '../tools/tools.module';
+import { LogModule } from '../log/log.module';
 
 // 实体
 import { Article } from './entities/article.entity';
@@ -46,6 +47,7 @@ import { TalkService } from './services/talk.service';
 import { AlbumService } from './services/album.service';
 import { PhotoService } from './services/photo.service';
 import { ContentCensorService } from './services/content-censor.service';
+import { OperationLogService } from './services/operation-log.service';
 
 // 控制器
 import {
@@ -83,6 +85,7 @@ import { AlbumController } from './controllers/album.controller';
 import { PhotoController } from './controllers/photo.controller';
 import { AdminPhotoController } from './controllers/admin-photo.controller';
 import { ContentCensorController } from './controllers/content-censor.controller';
+import { AdminOperationLogController } from './controllers/admin-operation-log.controller';
 
 // 拦截器
 import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interceptor';
@@ -127,6 +130,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     UserModule,
     HttpModule,
     ToolsModule,
+    LogModule,
   ],
   controllers: [
     ArticleController,
@@ -161,6 +165,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     PhotoController,
     AdminPhotoController,
     ContentCensorController,
+    AdminOperationLogController,
   ],
   providers: [
     ArticleService,
@@ -180,6 +185,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     AlbumService,
     PhotoService,
     ContentCensorService,
+    OperationLogService,
     {
       provide: IpService,
       useFactory: (httpService: HttpService, configService: ConfigService) => {
@@ -206,6 +212,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     AlbumService,
     PhotoService,
     ContentCensorService,
+    OperationLogService,
     IpService,
   ],
 })
