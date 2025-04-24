@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { sensitiveWords as defaultSensitiveWords } from '../sensitiveWords';
 import { Repository } from 'typeorm';
 import { SiteConfig } from '../../blog/entities/site-config.entity';
 import { InjectRepository } from '@nestjs/typeorm';
+import { LocalTextFilterService } from './local-text-filter.service';
 
 interface CensorResult {
   isSafe: boolean;
@@ -36,6 +36,7 @@ export class BaiduTextCensorService {
     private readonly configService: ConfigService,
     @InjectRepository(SiteConfig)
     private readonly siteConfigRepository: Repository<SiteConfig>,
+    private readonly localTextFilterService: LocalTextFilterService,
   ) {
     this.API_KEY = this.configService.get<string>('baidu.apiKey');
     this.SECRET_KEY = this.configService.get<string>('baidu.secretKey');
@@ -128,14 +129,11 @@ export class BaiduTextCensorService {
   }
 
   /**
-   * 文本审核
+   * 文本内容审核
    * @param text 待审核文本
    * @returns 审核结果
    */
   async textCensor(text: string): Promise<CensorResult> {
-    // 检查错误重置时间
-    this.checkErrorReset();
-
     // 如果文本为空，直接返回安全
     if (!text || text.trim() === '') {
       return {
@@ -146,7 +144,6 @@ export class BaiduTextCensorService {
 
     // 如果服务不可用，使用本地敏感词过滤
     if (!this.isServiceAvailable()) {
-      this.logger.warn('百度文本审核服务不可用，使用本地过滤');
       return this.localFilter(text);
     }
 
@@ -239,13 +236,12 @@ export class BaiduTextCensorService {
       }
 
       // 审核失败的情况
-      this.logger.warn(`百度文本审核失败，使用本地过滤: ${JSON.stringify(result)}`);
+      this.logger.warn(`百度文本审核返回结果异常: ${JSON.stringify(result)}`);
       this.recordError();
       return this.localFilter(text);
     } catch (error) {
-      this.logger.error(`百度文本审核异常: ${error.message}`);
+      this.logger.error(`百度文本审核请求失败: ${error.message}`, error.stack);
       this.recordError();
-      // 出错时使用本地过滤
       return this.localFilter(text);
     }
   }
@@ -256,29 +252,8 @@ export class BaiduTextCensorService {
    * @returns 过滤结果
    */
   private localFilter(text: string): Promise<CensorResult> {
-    // 简单的敏感词列表（实际应用中可能会更复杂）
-    const sensitiveWords = defaultSensitiveWords;
-
-    let filteredText = text;
-    const foundWords = [];
-
-    // 检测并替换敏感词
-    sensitiveWords.forEach((word) => {
-      if (text.includes(word)) {
-        foundWords.push(word);
-        // 替换为等长的星号
-        const replacement = '*'.repeat(word.length);
-        const regex = new RegExp(this.escapeRegExp(word), 'g');
-        filteredText = filteredText.replace(regex, replacement);
-      }
-    });
-
-    return Promise.resolve({
-      isSafe: foundWords.length === 0,
-      filteredText,
-      reasons: foundWords.length > 0 ? ['存在敏感内容'] : undefined,
-      originalText: foundWords.length > 0 ? text : undefined,
-    });
+    const result = this.localTextFilterService.filter(text);
+    return Promise.resolve(result);
   }
 
   /**

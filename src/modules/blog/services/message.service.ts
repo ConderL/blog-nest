@@ -6,6 +6,7 @@ import { Message } from '../entities/message.entity';
 import { ReviewMessageDto } from '../dto/review-message.dto';
 import { SiteConfig } from '../entities/site-config.entity';
 import { ContentCensorService } from './content-censor.service';
+import { LocalTextFilterService } from '../../tools/services/local-text-filter.service';
 
 /**
  * 留言板服务
@@ -21,6 +22,7 @@ export class MessageService {
     @InjectRepository(SiteConfig)
     private readonly siteConfigRepository: Repository<SiteConfig>,
     private readonly contentCensorService: ContentCensorService,
+    private readonly localTextFilterService: LocalTextFilterService,
   ) {}
 
   /**
@@ -95,14 +97,22 @@ export class MessageService {
 
       let isCheckValue = 1; // 默认为已审核
 
-      // 如果开启了百度审核，需要设置为未审核(0)，等待后续百度审核流程
-      if (siteConfig?.baiduCheck === 1) {
+      // 如果未开启百度审核，先进行本地敏感词过滤
+      if (!siteConfig?.baiduCheck || siteConfig.baiduCheck === 0) {
+        if (createMessageDto.messageContent) {
+          const filterResult = this.localTextFilterService.filter(createMessageDto.messageContent);
+          createMessageDto.messageContent = filterResult.filteredText;
+          this.logger.log(`留言内容本地敏感词过滤结果: isSafe=${filterResult.isSafe}, 内容已过滤`);
+        }
+
+        // 检查是否开启了手动审核
+        if (siteConfig?.messageCheck === 1) {
+          this.logger.log('留言手动审核已开启，留言将设置为待审核状态');
+          isCheckValue = 0;
+        }
+      } else {
+        // 如果开启了百度审核，需要设置为未审核(0)，等待后续百度审核流程
         this.logger.log('百度文本审核已开启，留言将设置为待审核状态');
-        isCheckValue = 0;
-      }
-      // 否则检查留言手动审核开关
-      else if (siteConfig?.messageCheck === 1) {
-        this.logger.log('留言手动审核已开启，留言将设置为待审核状态');
         isCheckValue = 0;
       }
 

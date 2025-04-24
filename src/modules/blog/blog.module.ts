@@ -60,6 +60,8 @@ import {
 } from './controllers/category.controller';
 import { TagController, AdminTagController } from './controllers/tag.controller';
 import { CommentController } from './controllers/comment.controller';
+import { CommentReplyController } from './controllers/comment-reply.controller';
+import { CommentSubmitController } from './controllers/comment-submit.controller';
 import { AdminCommentController } from './controllers/admin-comment.controller';
 import { FileController } from './controllers/file.controller';
 import { FriendController } from './controllers/friend.controller';
@@ -73,7 +75,6 @@ import { VisitLogController } from './controllers/visit-log.controller';
 import { SearchController } from './controllers/search.controller';
 import { BlogInfoController } from './controllers/blog-info.controller';
 import { CarouselController, AdminCarouselController } from './controllers/carousel.controller';
-import { CommentReplyController } from './controllers/comment-reply.controller';
 import { MessageController } from './controllers/message.controller';
 import { AdminMessageController } from './controllers/admin-message.controller';
 import { AdminTalkController, TalkController } from './controllers/admin-talk.controller';
@@ -137,8 +138,9 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     TagController,
     AdminTagController,
     CommentController,
-    AdminCommentController,
     CommentReplyController,
+    CommentSubmitController,
+    AdminCommentController,
     FileController,
     FriendController,
     AdminFriendController,

@@ -4,6 +4,7 @@ import { Repository, In } from 'typeorm';
 import { Comment } from '../entities/comment.entity';
 import { SiteConfig } from '../entities/site-config.entity';
 import { ContentCensorService } from './content-censor.service';
+import { LocalTextFilterService } from '../../tools/services/local-text-filter.service';
 
 /**
  * 评论服务
@@ -17,6 +18,7 @@ export class CommentService {
     @InjectRepository(SiteConfig)
     private siteConfigRepository: Repository<SiteConfig>,
     private contentCensorService: ContentCensorService,
+    private localTextFilterService: LocalTextFilterService,
   ) {}
 
   /**
@@ -36,14 +38,22 @@ export class CommentService {
 
       let isCheckValue = 1; // 默认为已审核
 
-      // 如果开启了百度审核，需要设置为未审核(0)，等待后续百度审核流程
-      if (siteConfig?.baiduCheck === 1) {
+      // 如果未开启百度审核，先进行本地敏感词过滤
+      if (!siteConfig?.baiduCheck || siteConfig.baiduCheck === 0) {
+        if (comment.content) {
+          const filterResult = this.localTextFilterService.filter(comment.content);
+          comment.content = filterResult.filteredText;
+          console.log(`评论内容本地敏感词过滤结果: isSafe=${filterResult.isSafe}, 内容已过滤`);
+        }
+
+        // 检查是否开启了手动审核
+        if (siteConfig?.commentCheck === 1) {
+          console.log('评论手动审核已开启，评论将设置为待审核状态');
+          isCheckValue = 0;
+        }
+      } else {
+        // 如果开启了百度审核，需要设置为未审核(0)，等待后续百度审核流程
         console.log('百度文本审核已开启，评论将设置为待审核状态');
-        isCheckValue = 0;
-      }
-      // 否则检查评论手动审核开关
-      else if (siteConfig?.commentCheck === 1) {
-        console.log('评论手动审核已开启，评论将设置为待审核状态');
         isCheckValue = 0;
       }
 
