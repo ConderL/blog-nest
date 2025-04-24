@@ -110,7 +110,15 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, options);
+  // 设置多个路径访问文档
   SwaggerModule.setup('api-docs', app, document);
+  SwaggerModule.setup('swagger-ui', app, document);
+  SwaggerModule.setup('v2/api-docs', app, document);
+  logger.log('API文档已配置在以下路径:');
+  logger.log('- /api-docs');
+  logger.log('- /swagger-ui');
+  logger.log('- /doc.html (重定向)');
+  logger.log('- /v2/api-docs');
 
   // 启用WebSocket
   app.enableCors({

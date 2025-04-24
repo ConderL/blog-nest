@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UploadService } from './services/upload/upload.service';
 import { UploadController } from './controllers/upload/upload.controller';
 import { FilesController } from './controllers/files.controller';
+import { AdminFileController } from './controllers/admin-file.controller';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -21,7 +22,7 @@ import { UploadFileEntity } from './entities/file.entity';
     }),
     TypeOrmModule.forFeature([UploadFileEntity]),
   ],
-  controllers: [UploadController, FilesController],
+  controllers: [UploadController, FilesController, AdminFileController],
   providers: [UploadService],
   exports: [UploadService],
 })

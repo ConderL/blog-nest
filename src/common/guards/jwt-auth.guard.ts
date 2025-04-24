@@ -30,6 +30,14 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     '/report',
     '/',
     '/about',
+    // Swagger API文档相关路径
+    '/doc.html',
+    '/api-docs',
+    '/swagger-ui',
+    '/swagger-resources',
+    '/v2/api-docs',
+    '/v3/api-docs',
+    '/favicon.ico',
   ];
 
   canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
