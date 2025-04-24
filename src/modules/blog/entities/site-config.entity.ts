@@ -110,14 +110,20 @@ export class SiteConfig {
   /**
    * 是否评论审核 (0否 1是)
    */
-  @Column({ name: 'comment_check', type: 'tinyint', default: 1, comment: '是否评论审核 (0否 1是)' })
-  commentCheck: boolean;
+  @Column({ name: 'comment_check', type: 'tinyint', default: 0, comment: '是否评论审核 (0否 1是)' })
+  commentCheck: number;
 
   /**
    * 是否留言审核 (0否 1是)
    */
-  @Column({ name: 'message_check', type: 'tinyint', default: 1, comment: '是否留言审核 (0否 1是)' })
-  messageCheck: boolean;
+  @Column({ name: 'message_check', type: 'tinyint', default: 0, comment: '是否留言审核 (0否 1是)' })
+  messageCheck: number;
+
+  /**
+   * 是否百度审核 (0否 1是)
+   */
+  @Column({ name: 'baidu_check', type: 'tinyint', default: 1, comment: '是否百度审核 (0否 1是)' })
+  baiduCheck: number;
 
   /**
    * 是否开启打赏 (0否 1是)

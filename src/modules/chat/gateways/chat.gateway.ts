@@ -16,7 +16,7 @@ import { ConfigService } from '@nestjs/config';
 import { ChatMessageDto } from '../dto/chat-message.dto';
 import { IpService } from '../../../services/ip.service';
 import { NicknameGenerator } from '../../../common/utils/nickname.util';
-import { BaiduTextCensorService } from '../../tools/services/baidu-text-censor/baidu-text-censor.service';
+import { BaiduTextCensorService } from '../../tools/services/baidu-text-censor.service';
 
 /**
  * 聊天WebSocket网关

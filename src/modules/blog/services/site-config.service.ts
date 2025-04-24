@@ -55,6 +55,24 @@ export class SiteConfigService {
    */
   async update(id: number, siteConfig: Partial<SiteConfig>): Promise<SiteConfig> {
     this.logger.log(`更新网站配置: id=${id}, ${JSON.stringify(siteConfig)}`);
+
+    // 处理百度审核与手动审核的互斥关系
+    if (siteConfig.baiduCheck !== undefined) {
+      // 如果开启了百度审核，则关闭评论审核和留言审核
+      if (siteConfig.baiduCheck === 1) {
+        this.logger.log('开启百度审核，自动关闭评论审核和留言审核');
+        siteConfig.commentCheck = 0;
+        siteConfig.messageCheck = 0;
+      }
+    } else if (
+      (siteConfig.commentCheck !== undefined && siteConfig.commentCheck === 1) ||
+      (siteConfig.messageCheck !== undefined && siteConfig.messageCheck === 1)
+    ) {
+      // 如果开启了评论审核或留言审核，则关闭百度审核
+      this.logger.log('开启评论审核或留言审核，自动关闭百度审核');
+      siteConfig.baiduCheck = 0;
+    }
+
     // 更新时间
     siteConfig.updateTime = new Date();
     await this.siteConfigRepository.update(id, siteConfig);

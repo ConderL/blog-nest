@@ -15,7 +15,7 @@ import { SiteConfigService } from '../services/site-config.service';
 import { SiteConfig } from '../entities/site-config.entity';
 import { Result } from '../../../common/result';
 import { Auth } from '../../../decorators/auth.decorator';
-import { IsOptional, IsString, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -90,14 +90,19 @@ class UpdateSiteConfigDto implements Partial<SiteConfig> {
   qq?: string;
 
   @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  commentCheck?: boolean;
+  @Type(() => Number)
+  @IsNumber()
+  commentCheck?: number;
 
   @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  messageCheck?: boolean;
+  @Type(() => Number)
+  @IsNumber()
+  messageCheck?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  baiduCheck?: number;
 
   @IsOptional()
   @Type(() => Boolean)

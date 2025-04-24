@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
-import { BaiduTextCensorService } from './services/baidu-text-censor/baidu-text-censor.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { SiteConfig } from '../blog/entities/site-config.entity';
+import { BaiduTextCensorService } from './services/baidu-text-censor.service';
 
 @Module({
   imports: [
@@ -10,6 +12,7 @@ import { BaiduTextCensorService } from './services/baidu-text-censor/baidu-text-
       maxRedirects: 5,
     }),
     ConfigModule,
+    TypeOrmModule.forFeature([SiteConfig]),
   ],
   providers: [BaiduTextCensorService],
   exports: [BaiduTextCensorService],

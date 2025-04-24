@@ -5,6 +5,7 @@ import { Message } from '../entities/message.entity';
 // import { CreateMessageDto } from '../dto/create-message.dto';
 import { ReviewMessageDto } from '../dto/review-message.dto';
 import { SiteConfig } from '../entities/site-config.entity';
+import { ContentCensorService } from './content-censor.service';
 
 /**
  * 留言板服务
@@ -19,6 +20,7 @@ export class MessageService {
     private readonly messageRepository: Repository<Message>,
     @InjectRepository(SiteConfig)
     private readonly siteConfigRepository: Repository<SiteConfig>,
+    private readonly contentCensorService: ContentCensorService,
   ) {}
 
   /**
@@ -85,17 +87,32 @@ export class MessageService {
   async create(createMessageDto: any) {
     this.logger.log(`创建留言：${JSON.stringify(createMessageDto)}`);
     try {
-      // 获取站点配置，读取留言审核开关
+      // 检查百度审核服务状态，可能会自动切换到手动审核模式
+      await this.contentCensorService.checkBaiduServiceStatus();
+
+      // 获取站点配置，读取留言审核开关和百度审核开关
       const [siteConfig] = await this.siteConfigRepository.find();
 
-      // 如果开启留言审核，则设置为未审核(0)，否则设置为已审核(1)
+      let isCheckValue = 1; // 默认为已审核
+
+      // 如果开启了百度审核，需要设置为未审核(0)，等待后续百度审核流程
+      if (siteConfig?.baiduCheck === 1) {
+        this.logger.log('百度文本审核已开启，留言将设置为待审核状态');
+        isCheckValue = 0;
+      }
+      // 否则检查留言手动审核开关
+      else if (siteConfig?.messageCheck === 1) {
+        this.logger.log('留言手动审核已开启，留言将设置为待审核状态');
+        isCheckValue = 0;
+      }
+
       this.logger.log(
-        `留言审核开关状态: ${siteConfig?.messageCheck ? '开启' : '关闭'}, 设置审核状态: ${siteConfig?.messageCheck}`,
+        `留言审核状态设置: ${isCheckValue === 0 ? '待审核' : '已审核'}, 百度审核=${siteConfig?.baiduCheck ? '开启' : '关闭'}, 手动审核=${siteConfig?.messageCheck ? '开启' : '关闭'}`,
       );
 
       const message = this.messageRepository.create({
         ...createMessageDto,
-        isCheck: siteConfig?.messageCheck ? 0 : 1,
+        isCheck: isCheckValue,
         createTime: new Date(),
         updateTime: new Date(),
       });
@@ -103,6 +120,20 @@ export class MessageService {
 
       // 处理可能返回数组的情况
       const result = Array.isArray(savedMessage) ? savedMessage[0] : savedMessage;
+
+      // 如果开启了百度审核，立即进行内容审核
+      if (siteConfig?.baiduCheck === 1) {
+        try {
+          this.logger.log('开始对留言进行百度文本审核');
+          // 异步执行审核，不阻塞留言创建流程
+          this.contentCensorService.censorMessage(result.id).then((isSafe) => {
+            this.logger.log(`留言百度审核完成: messageId=${result.id}, isSafe=${isSafe}`);
+          });
+        } catch (censorError) {
+          this.logger.error(`留言百度审核异常: ${censorError.message}`, censorError.stack);
+          // 审核异常不影响留言创建
+        }
+      }
 
       this.logger.log(`创建留言成功，ID：${result.id}`);
       return result;

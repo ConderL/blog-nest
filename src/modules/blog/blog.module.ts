@@ -9,6 +9,7 @@ import { UserModule } from '../user/user.module';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { IpService } from '../../services/ip.service';
+import { ToolsModule } from '../tools/tools.module';
 
 // 实体
 import { Article } from './entities/article.entity';
@@ -44,6 +45,7 @@ import { MessageService } from './services/message.service';
 import { TalkService } from './services/talk.service';
 import { AlbumService } from './services/album.service';
 import { PhotoService } from './services/photo.service';
+import { ContentCensorService } from './services/content-censor.service';
 
 // 控制器
 import {
@@ -79,6 +81,7 @@ import { AdminAlbumController } from './controllers/admin-album.controller';
 import { AlbumController } from './controllers/album.controller';
 import { PhotoController } from './controllers/photo.controller';
 import { AdminPhotoController } from './controllers/admin-photo.controller';
+import { ContentCensorController } from './controllers/content-censor.controller';
 
 // 拦截器
 import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interceptor';
@@ -122,6 +125,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     UploadModule,
     UserModule,
     HttpModule,
+    ToolsModule,
   ],
   controllers: [
     ArticleController,
@@ -154,6 +158,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     AlbumController,
     PhotoController,
     AdminPhotoController,
+    ContentCensorController,
   ],
   providers: [
     ArticleService,
@@ -172,6 +177,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     TalkService,
     AlbumService,
     PhotoService,
+    ContentCensorService,
     {
       provide: IpService,
       useFactory: (httpService: HttpService, configService: ConfigService) => {
@@ -197,6 +203,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     TalkService,
     AlbumService,
     PhotoService,
+    ContentCensorService,
     IpService,
   ],
 })

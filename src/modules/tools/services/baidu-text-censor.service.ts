@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import * as crypto from 'crypto';
+import { sensitiveWords as defaultSensitiveWords } from '../sensitiveWords';
+import { Repository } from 'typeorm';
+import { SiteConfig } from '../../blog/entities/site-config.entity';
+import { InjectRepository } from '@nestjs/typeorm';
 
 interface CensorResult {
   isSafe: boolean;
@@ -22,7 +25,18 @@ export class BaiduTextCensorService {
   private accessToken: string;
   private tokenExpireTime: number;
 
-  constructor(private readonly configService: ConfigService) {
+  // 错误计数和服务状态
+  private errorCount: number = 0;
+  private lastErrorTime: number = 0;
+  private serviceAvailable: boolean = true;
+  private readonly MAX_ERROR_COUNT: number = 5; // 最大错误次数
+  private readonly ERROR_RESET_TIME: number = 30 * 60 * 1000; // 错误重置时间(30分钟)
+
+  constructor(
+    private readonly configService: ConfigService,
+    @InjectRepository(SiteConfig)
+    private readonly siteConfigRepository: Repository<SiteConfig>,
+  ) {
     this.API_KEY = this.configService.get<string>('baidu.apiKey');
     this.SECRET_KEY = this.configService.get<string>('baidu.secretKey');
     this.accessToken = null;
@@ -30,10 +44,56 @@ export class BaiduTextCensorService {
 
     if (!this.API_KEY || !this.SECRET_KEY) {
       this.logger.warn('百度API密钥未配置，文本审核将使用本地过滤');
+      this.serviceAvailable = false;
     } else {
       this.getAccessToken().catch((err) => {
         this.logger.error(`初始化百度API访问令牌失败: ${err.message}`);
+        this.recordError();
       });
+    }
+  }
+
+  /**
+   * 获取服务可用状态
+   * @returns 百度审核服务是否可用
+   */
+  public isServiceAvailable(): boolean {
+    // 检查错误重置时间
+    this.checkErrorReset();
+    return this.serviceAvailable && !!this.API_KEY && !!this.SECRET_KEY;
+  }
+
+  /**
+   * 记录错误并检查错误次数
+   */
+  private recordError(): void {
+    this.errorCount++;
+    this.lastErrorTime = Date.now();
+
+    this.logger.warn(
+      `百度审核服务出现错误，当前错误计数: ${this.errorCount}/${this.MAX_ERROR_COUNT}`,
+    );
+
+    if (this.errorCount >= this.MAX_ERROR_COUNT) {
+      this.serviceAvailable = false;
+      this.logger.error(
+        `百度审核服务错误次数过多，服务暂时不可用。将在${this.ERROR_RESET_TIME / 60000}分钟后重试`,
+      );
+    }
+  }
+
+  /**
+   * 检查是否需要重置错误计数
+   */
+  private checkErrorReset(): void {
+    if (!this.serviceAvailable && this.lastErrorTime > 0) {
+      const now = Date.now();
+      if (now - this.lastErrorTime > this.ERROR_RESET_TIME) {
+        this.logger.log('重置百度审核服务错误计数，尝试恢复服务');
+        this.errorCount = 0;
+        this.lastErrorTime = 0;
+        this.serviceAvailable = true;
+      }
     }
   }
 
@@ -62,6 +122,7 @@ export class BaiduTextCensorService {
       throw new Error('获取访问令牌失败: ' + JSON.stringify(response.data));
     } catch (error) {
       this.logger.error(`获取百度API访问令牌失败: ${error.message}`);
+      this.recordError();
       throw error;
     }
   }
@@ -72,6 +133,9 @@ export class BaiduTextCensorService {
    * @returns 审核结果
    */
   async textCensor(text: string): Promise<CensorResult> {
+    // 检查错误重置时间
+    this.checkErrorReset();
+
     // 如果文本为空，直接返回安全
     if (!text || text.trim() === '') {
       return {
@@ -80,11 +144,17 @@ export class BaiduTextCensorService {
       };
     }
 
-    console.log(this.API_KEY, this.SECRET_KEY);
+    // 如果服务不可用，使用本地敏感词过滤
+    if (!this.isServiceAvailable()) {
+      this.logger.warn('百度文本审核服务不可用，使用本地过滤');
+      return this.localFilter(text);
+    }
+
+    const [siteConfig] = await this.siteConfigRepository.find();
 
     try {
       // 如果未配置API密钥，使用本地敏感词过滤
-      if (!this.API_KEY || !this.SECRET_KEY) {
+      if (!this.API_KEY || !this.SECRET_KEY || siteConfig.baiduCheck === 0) {
         return this.localFilter(text);
       }
 
@@ -125,7 +195,7 @@ export class BaiduTextCensorService {
 
       // 如果审核成功
       if (result.conclusion) {
-        let isSafe = result.conclusionType === 1; // 1表示合规
+        const isSafe = result.conclusionType === 1; // 1表示合规
         let filteredText = text;
         const reasons = [];
 
@@ -170,9 +240,11 @@ export class BaiduTextCensorService {
 
       // 审核失败的情况
       this.logger.warn(`百度文本审核失败，使用本地过滤: ${JSON.stringify(result)}`);
+      this.recordError();
       return this.localFilter(text);
     } catch (error) {
       this.logger.error(`百度文本审核异常: ${error.message}`);
+      this.recordError();
       // 出错时使用本地过滤
       return this.localFilter(text);
     }
@@ -185,23 +257,7 @@ export class BaiduTextCensorService {
    */
   private localFilter(text: string): Promise<CensorResult> {
     // 简单的敏感词列表（实际应用中可能会更复杂）
-    const sensitiveWords = [
-      '政治',
-      '色情',
-      '赌博',
-      '毒品',
-      '暴力',
-      '恐怖',
-      '歧视',
-      '谩骂',
-      '习近平',
-      '共产党',
-      '法轮功',
-      '台独',
-      '港独',
-      '藏独',
-      '六四',
-    ];
+    const sensitiveWords = defaultSensitiveWords;
 
     let filteredText = text;
     const foundWords = [];

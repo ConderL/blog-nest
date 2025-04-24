@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Comment } from '../entities/comment.entity';
 import { SiteConfig } from '../entities/site-config.entity';
+import { ContentCensorService } from './content-censor.service';
 
 /**
  * 评论服务
@@ -15,6 +16,7 @@ export class CommentService {
     private commentRepository: Repository<Comment>,
     @InjectRepository(SiteConfig)
     private siteConfigRepository: Repository<SiteConfig>,
+    private contentCensorService: ContentCensorService,
   ) {}
 
   /**
@@ -26,22 +28,52 @@ export class CommentService {
     try {
       console.log('创建评论:', comment);
 
-      // 获取站点配置，读取评论审核开关
+      // 检查百度审核服务状态，可能会自动切换到手动审核模式
+      await this.contentCensorService.checkBaiduServiceStatus();
+
+      // 获取站点配置，读取评论审核开关和百度审核开关
       const [siteConfig] = await this.siteConfigRepository.find();
 
-      // 如果开启评论审核，则设置为未审核(0)，否则设置为已审核(1)
+      let isCheckValue = 1; // 默认为已审核
+
+      // 如果开启了百度审核，需要设置为未审核(0)，等待后续百度审核流程
+      if (siteConfig?.baiduCheck === 1) {
+        console.log('百度文本审核已开启，评论将设置为待审核状态');
+        isCheckValue = 0;
+      }
+      // 否则检查评论手动审核开关
+      else if (siteConfig?.commentCheck === 1) {
+        console.log('评论手动审核已开启，评论将设置为待审核状态');
+        isCheckValue = 0;
+      }
+
       console.log(
-        `评论审核开关状态: ${siteConfig?.commentCheck ? '开启' : '关闭'}, 设置审核状态: ${siteConfig?.commentCheck}`,
+        `评论审核状态设置: ${isCheckValue === 0 ? '待审核' : '已审核'}, 百度审核=${siteConfig?.baiduCheck ? '开启' : '关闭'}, 手动审核=${siteConfig?.commentCheck ? '开启' : '关闭'}`,
       );
 
       // 创建新评论，设置审核状态
       const newComment = this.commentRepository.create({
         ...comment,
-        isCheck: siteConfig?.commentCheck ? 0 : 1,
+        isCheck: isCheckValue,
       });
 
       const savedComment = await this.commentRepository.save(newComment);
       console.log('评论创建成功, ID:', savedComment.id);
+
+      // 如果开启了百度审核，立即进行内容审核
+      if (siteConfig?.baiduCheck === 1) {
+        try {
+          console.log('开始对评论进行百度文本审核');
+          // 异步执行审核，不阻塞评论创建流程
+          this.contentCensorService.censorComment(savedComment.id).then((isSafe) => {
+            console.log(`评论百度审核完成: commentId=${savedComment.id}, isSafe=${isSafe}`);
+          });
+        } catch (censorError) {
+          console.error('评论百度审核异常:', censorError);
+          // 审核异常不影响评论创建
+        }
+      }
+
       return savedComment;
     } catch (error) {
       console.error('创建评论失败:', error);
