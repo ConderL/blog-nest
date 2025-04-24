@@ -13,7 +13,7 @@ export class LogService {
 
   constructor(
     @InjectRepository(VisitLog)
-    private readonly visitLogRepository: Repository<VisitLog>,
+    public readonly visitLogRepository: Repository<VisitLog>,
     @InjectRepository(OperationLog)
     private readonly operationLogRepository: Repository<OperationLog>,
     @InjectRepository(ExceptionLog)
@@ -407,7 +407,7 @@ export class LogService {
         recordList: records,
         current,
         size,
-        total,
+        count: total,
       };
     } catch (error) {
       this.logger.error(`查询异常日志列表失败: ${error.message}`);

@@ -6,11 +6,12 @@ import { ExceptionLog } from './entities/exception-log.entity';
 import { LogService } from './log.service';
 import { LogController } from './log.controller';
 import { AdminExceptionLogController } from './controllers/admin-exception-log.controller';
+import { AdminVisitLogController } from './controllers/admin-visit-log.controller';
 import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature([VisitLog, OperationLog, ExceptionLog]), UserModule],
-  controllers: [LogController, AdminExceptionLogController],
+  controllers: [LogController, AdminExceptionLogController, AdminVisitLogController],
   providers: [LogService],
   exports: [LogService, TypeOrmModule.forFeature([VisitLog, OperationLog, ExceptionLog])],
 })
