@@ -14,6 +14,7 @@ import { MenuService } from './services/menu.service';
 import { RoleController } from './controllers/role.controller';
 import { MenuController } from './controllers/menu.controller';
 import { AdminMenuController } from './controllers/admin-menu.controller';
+import { AdminRoleController } from './controllers/admin-role.controller';
 import { UploadModule } from '../upload/upload.module';
 
 @Module({
@@ -35,6 +36,7 @@ import { UploadModule } from '../upload/upload.module';
     MenuController,
     AdminUserController,
     AdminMenuController,
+    AdminRoleController,
   ],
   providers: [UserService, RoleService, MenuService],
   exports: [UserService, RoleService, MenuService],
