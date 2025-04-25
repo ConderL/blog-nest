@@ -32,10 +32,10 @@ import {
 } from './common/exceptions/http.exception.filter';
 import { LogModule } from './modules/log/log.module';
 import { OnlineModule } from './modules/online/online.module';
-import { TaskModule } from './modules/task/task.module';
 
 import configuration from './config/configuration';
 import { createTypeOrmOptions } from './config/database.config';
+import { AdminModule } from './modules/admin/admin.modules';
 
 @Module({
   imports: [
@@ -72,7 +72,7 @@ import { createTypeOrmOptions } from './config/database.config';
     ChatModule,
     ToolsModule,
     OnlineModule,
-    TaskModule,
+    AdminModule,
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),
       exclude: ['/api*'],

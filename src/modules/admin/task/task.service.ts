@@ -2,23 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, SchedulerRegistry } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, LessThan } from 'typeorm';
-import { Article } from '../blog/entities/article.entity';
-import { VisitLog } from '../log/entities/visit-log.entity';
-import {
-  getBeforeDays,
-  getHourRange,
-  getTodayRange,
-  getRecentDays,
-  formatDate,
-} from '../../common/utils/date.utils';
+import { Article } from '../../blog/entities/article.entity';
+import { VisitLog } from '../../log/entities/visit-log.entity';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as moment from 'moment';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import * as config from '../../config/configuration';
-import { LogService } from '../log/log.service';
-import { OnlineService } from '../online/online.service';
+import * as config from '../../../config/configuration';
+import { LogService } from '../../log/log.service';
+import { OnlineService } from '../../online/online.service';
 import { Task } from './entities/task.entity';
 
 const execAsync = promisify(exec);
@@ -580,33 +573,20 @@ export class TaskService {
     current?: number;
     size?: number;
   }): Promise<{ list: Task[]; total: number }> {
-    const { taskName, taskGroup, status } = params;
-    const current = Number(params.current) || 1;
-    const size = Number(params.size) || 10;
-
-    this.logger.debug(
-      `搜索任务参数: ${JSON.stringify({
-        taskName,
-        taskGroup,
-        status: status !== undefined ? Number(status) : undefined,
-        current,
-        size,
-      })}`,
-    );
+    const { taskName, taskGroup, status, current = 1, size = 10 } = params;
 
     const queryBuilder = this.taskRepository.createQueryBuilder('task');
 
     if (taskName) {
-      queryBuilder.andWhere('task.taskName LIKE :taskName', { taskName: `%${taskName}%` });
+      queryBuilder.andWhere('task.task_name LIKE :taskName', { taskName: `%${taskName}%` });
     }
 
     if (taskGroup) {
-      queryBuilder.andWhere('task.taskGroup = :taskGroup', { taskGroup });
+      queryBuilder.andWhere('task.task_group = :taskGroup', { taskGroup });
     }
 
     if (status !== undefined && status !== null && !isNaN(Number(status))) {
-      const statusNumber = Number(status);
-      queryBuilder.andWhere('task.status = :status', { status: statusNumber });
+      queryBuilder.andWhere('task.status = :status', { status: Number(status) });
     }
 
     const total = await queryBuilder.getCount();

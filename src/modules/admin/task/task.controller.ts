@@ -11,12 +11,12 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TaskService } from './task.service';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { Result } from '../../common/utils/result';
-import { LogService } from '../log/log.service';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { Result } from '../../../common/utils/result';
+import { LogService } from '../../log/log.service';
 import { Task } from './entities/task.entity';
 // 暂时注释掉权限相关导入
 // import { Permissions } from '../../common/decorators/permissions.decorator';
