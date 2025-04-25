@@ -17,6 +17,7 @@ import * as moment from 'moment';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as config from '../../config/configuration';
+import { LogService } from '../log/log.service';
 
 const execAsync = promisify(exec);
 
@@ -31,6 +32,7 @@ export class TaskService {
     private readonly articleRepository: Repository<Article>,
     @InjectRepository(VisitLog)
     private readonly visitLogRepository: Repository<VisitLog>,
+    private readonly logService: LogService,
   ) {
     this.logger.log('TaskService initialized');
     // 确保备份目录存在
@@ -40,15 +42,65 @@ export class TaskService {
   }
 
   /**
+   * 记录任务执行日志封装方法
+   * @param taskName 任务名称
+   * @param taskGroup 任务分组
+   * @param invokeTarget 调用目标
+   * @param fn 实际执行的函数
+   */
+  private async executeWithLog(
+    taskName: string,
+    taskGroup: string,
+    invokeTarget: string,
+    fn: () => Promise<any>,
+  ): Promise<any> {
+    const startTime = new Date();
+    try {
+      // 执行任务
+      const result = await fn();
+
+      // 记录成功日志
+      await this.logService.recordTaskLog({
+        taskName,
+        taskGroup,
+        invokeTarget,
+        taskMessage: `${taskName} 执行成功，耗时: ${new Date().getTime() - startTime.getTime()}毫秒`,
+        status: 1, // 成功
+      });
+
+      return result;
+    } catch (error) {
+      // 记录失败日志
+      await this.logService.recordTaskLog({
+        taskName,
+        taskGroup,
+        invokeTarget,
+        taskMessage: `${taskName} 执行失败`,
+        status: 0, // 失败
+        errorInfo: error.message || JSON.stringify(error),
+      });
+
+      // 重新抛出异常，让上层捕获
+      throw error;
+    }
+  }
+
+  /**
    * 每天凌晨3点执行数据库备份
    */
   @Cron('0 0 3 * * *')
   async handleDatabaseBackup() {
-    this.logger.log('执行定时数据库备份...');
-    await this.performBackup(`backup_${moment().format('YYYY-MM-DD_HH-mm-ss')}.sql`);
-
-    // 保留最近30天的备份
-    this.cleanupOldBackups(30);
+    await this.executeWithLog(
+      '数据库备份',
+      'SYSTEM',
+      'taskService.handleDatabaseBackup',
+      async () => {
+        this.logger.log('执行定时数据库备份...');
+        await this.performBackup(`backup_${moment().format('YYYY-MM-DD_HH-mm-ss')}.sql`);
+        // 保留最近30天的备份
+        this.cleanupOldBackups(30);
+      },
+    );
   }
 
   /**
@@ -56,17 +108,25 @@ export class TaskService {
    */
   @Cron('0 0 * * * *')
   async handleHourlyVisitStats() {
-    this.logger.log('收集小时访问统计...');
-    const now = new Date();
-    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    await this.executeWithLog(
+      '访问统计',
+      'SYSTEM',
+      'taskService.handleHourlyVisitStats',
+      async () => {
+        this.logger.log('收集小时访问统计...');
+        const now = new Date();
+        const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
-    const visits = await this.visitLogRepository.count({
-      where: {
-        createTime: Between(hourAgo, now) as any,
+        const visits = await this.visitLogRepository.count({
+          where: {
+            createTime: Between(hourAgo, now) as any,
+          },
+        });
+
+        this.logger.log(`过去一小时的访问量: ${visits}`);
+        return visits;
       },
-    });
-
-    this.logger.log(`过去一小时的访问量: ${visits}`);
+    );
   }
 
   /**
@@ -74,24 +134,29 @@ export class TaskService {
    */
   @Cron('0 0 2 * * *')
   async handleDataCleanup() {
-    this.logger.log('清理过期访问日志...');
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    await this.executeWithLog('数据清理', 'SYSTEM', 'taskService.handleDataCleanup', async () => {
+      this.logger.log('清理过期访问日志...');
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const result = await this.visitLogRepository.delete({
-      createTime: LessThan(thirtyDaysAgo) as any,
+      const result = await this.visitLogRepository.delete({
+        createTime: LessThan(thirtyDaysAgo) as any,
+      });
+
+      this.logger.log(`已清理 ${result.affected || 0} 条过期访问日志`);
+      return result;
     });
-
-    this.logger.log(`已清理 ${result.affected || 0} 条过期访问日志`);
   }
 
   /**
    * 手动触发备份
    */
   async manualBackup(): Promise<string> {
-    const filename = `manual_backup_${moment().format('YYYY-MM-DD_HH-mm-ss')}.sql`;
-    await this.performBackup(filename);
-    return path.join(this.backupDir, filename);
+    return this.executeWithLog('手动备份', 'MANUAL', 'taskService.manualBackup', async () => {
+      const filename = `manual_backup_${moment().format('YYYY-MM-DD_HH-mm-ss')}.sql`;
+      await this.performBackup(filename);
+      return path.join(this.backupDir, filename);
+    });
   }
 
   /**
@@ -138,30 +203,32 @@ export class TaskService {
    * 获取统计摘要
    */
   async getStatsSummary(): Promise<any> {
-    const articleCount = await this.articleRepository.count({
-      where: { isDelete: 0 },
+    return this.executeWithLog('统计摘要', 'SYSTEM', 'taskService.getStatsSummary', async () => {
+      const articleCount = await this.articleRepository.count({
+        where: { isDelete: 0 },
+      });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const todayVisits = await this.visitLogRepository.count({
+        where: {
+          createTime: Between(today, new Date()) as any,
+        },
+      });
+
+      const totalVisits = await this.visitLogRepository.count();
+
+      // 获取过去7天的访问趋势
+      const weeklyTrend = await this.getWeeklyVisitTrend();
+
+      return {
+        articleCount,
+        todayVisits,
+        totalVisits,
+        weeklyTrend,
+      };
     });
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const todayVisits = await this.visitLogRepository.count({
-      where: {
-        createTime: Between(today, new Date()) as any,
-      },
-    });
-
-    const totalVisits = await this.visitLogRepository.count();
-
-    // 获取过去7天的访问趋势
-    const weeklyTrend = await this.getWeeklyVisitTrend();
-
-    return {
-      articleCount,
-      todayVisits,
-      totalVisits,
-      weeklyTrend,
-    };
   }
 
   /**
@@ -194,85 +261,90 @@ export class TaskService {
    * 获取备份文件列表
    */
   async getBackupList(): Promise<any[]> {
-    try {
-      const files = fs.readdirSync(this.backupDir);
+    return this.executeWithLog('获取备份列表', 'SYSTEM', 'taskService.getBackupList', async () => {
+      try {
+        const files = fs.readdirSync(this.backupDir);
 
-      return files
-        .map((file) => {
-          const filePath = path.join(this.backupDir, file);
-          const stats = fs.statSync(filePath);
-
-          return {
-            filename: file,
-            size: stats.size,
-            createdAt: stats.mtime,
-            path: filePath,
-          };
-        })
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // 按时间倒序
-    } catch (error) {
-      this.logger.error(`获取备份列表失败: ${error.message}`);
-      return [];
-    }
+        return files
+          .filter((file) => file.endsWith('.sql'))
+          .map((file) => {
+            const filePath = path.join(this.backupDir, file);
+            const stats = fs.statSync(filePath);
+            return {
+              filename: file,
+              size: stats.size,
+              createTime: stats.mtime,
+            };
+          })
+          .sort((a, b) => b.createTime.getTime() - a.createTime.getTime());
+      } catch (error) {
+        this.logger.error(`获取备份列表失败: ${error.message}`);
+        throw error;
+      }
+    });
   }
 
   /**
-   * 删除指定备份文件
+   * 删除备份文件
    */
   async deleteBackup(filename: string): Promise<boolean> {
-    try {
+    return this.executeWithLog('删除备份', 'SYSTEM', 'taskService.deleteBackup', async () => {
       const filePath = path.join(this.backupDir, filename);
 
-      // 安全检查 - 确保文件在备份目录内
-      if (!filePath.startsWith(this.backupDir) || !fs.existsSync(filePath)) {
-        return false;
-      }
+      try {
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`文件不存在: ${filename}`);
+        }
 
-      fs.unlinkSync(filePath);
-      this.logger.log(`已删除备份文件: ${filename}`);
-      return true;
-    } catch (error) {
-      this.logger.error(`删除备份文件失败: ${error.message}`);
-      return false;
-    }
+        fs.unlinkSync(filePath);
+        this.logger.log(`备份文件已删除: ${filename}`);
+        return true;
+      } catch (error) {
+        this.logger.error(`删除备份文件失败: ${error.message}`);
+        throw error;
+      }
+    });
   }
 
   /**
-   * 获取访问统计数据
+   * 获取访问统计
    */
   async getVisitStats(period: string = 'week'): Promise<any> {
-    let startDate: Date;
-    const endDate = new Date();
-    const today = moment().startOf('day');
+    return this.executeWithLog('访问统计', 'SYSTEM', 'taskService.getVisitStats', async () => {
+      let startDate: Date;
+      const endDate = new Date();
 
-    switch (period) {
-      case 'day':
-        startDate = today.toDate();
-        break;
-      case 'month':
-        startDate = moment().subtract(30, 'days').startOf('day').toDate();
-        break;
-      case 'week':
-      default:
-        startDate = moment().subtract(7, 'days').startOf('day').toDate();
-        break;
-    }
+      // 根据周期确定开始日期
+      switch (period) {
+        case 'day':
+          startDate = moment().startOf('day').toDate();
+          break;
+        case 'week':
+          startDate = moment().subtract(6, 'days').startOf('day').toDate();
+          break;
+        case 'month':
+          startDate = moment().subtract(29, 'days').startOf('day').toDate();
+          break;
+        default:
+          startDate = moment().subtract(6, 'days').startOf('day').toDate();
+      }
 
-    // 获取时间段内的每日访问量
-    const dailyStats = await this.getDailyVisitStats(startDate, endDate);
+      // 获取日访问统计
+      const dailyStats = await this.getDailyVisitStats(startDate, endDate);
 
-    // 获取访问量最高的IP来源
-    const topIPs = await this.getTopIPs(startDate, endDate);
+      // 获取IP访问排行
+      const topIPs = await this.getTopIPs(startDate, endDate);
 
-    // 获取访问量最高的页面
-    const topPages = await this.getTopPages(startDate, endDate);
+      // 获取页面访问排行
+      const topPages = await this.getTopPages(startDate, endDate);
 
-    return {
-      period,
-      dailyStats,
-      topIPs,
-      topPages,
-    };
+      return {
+        period,
+        dailyStats,
+        topIPs,
+        topPages,
+      };
+    });
   }
 
   /**

@@ -1,6 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { PERMISSION_KEY } from '../decorators/require-permission.decorator';
 import { Logger } from '@nestjs/common';
 
 @Injectable()
@@ -14,13 +15,19 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (!requiredRoles) {
-      return true; // 如果没有设置角色要求，则允许访问
+    const requiredPermission = this.reflector.getAllAndOverride<string>(PERMISSION_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    // 如果没有设置角色要求和权限要求，则允许访问
+    if (!requiredRoles && !requiredPermission) {
+      return true;
     }
 
     const { user } = context.switchToHttp().getRequest();
     this.logger.debug(
-      `RolesGuard检查用户权限: ${JSON.stringify(user)}, 需要角色: ${requiredRoles}`,
+      `权限检查: 用户: ${JSON.stringify(user)}, 需要角色: ${requiredRoles}, 需要权限: ${requiredPermission}`,
     );
 
     // 确保用户对象存在
@@ -29,15 +36,39 @@ export class RolesGuard implements CanActivate {
       return false;
     }
 
-    // 使用用户名判断是否为管理员
-    // 如果requiredRoles包含'admin'，则只有username为'admin'的用户才能访问
-    if (requiredRoles.includes('admin')) {
-      const isAdmin = user.username === 'admin';
-      this.logger.debug(`请求需要管理员权限，用户名: ${user.username}, 是否是管理员: ${isAdmin}`);
-      return isAdmin;
+    // 检查角色
+    if (requiredRoles) {
+      // 使用用户名判断是否为管理员
+      if (requiredRoles.includes('admin')) {
+        const isAdmin = user.username === 'admin';
+        this.logger.debug(`请求需要管理员角色，用户名: ${user.username}, 是否是管理员: ${isAdmin}`);
+
+        // 如果不是管理员，直接拒绝
+        if (!isAdmin) {
+          return false;
+        }
+      } else {
+        // TODO: 实现其他角色的检查逻辑
+        // 可以根据user.roles检查用户是否拥有所需角色
+        this.logger.warn('暂不支持非管理员角色检查');
+        return false;
+      }
     }
 
-    // 对于其他角色类型，可以根据实际情况扩展
-    return false;
+    // 检查权限
+    if (requiredPermission) {
+      // 管理员默认拥有所有权限
+      if (user.username === 'admin') {
+        this.logger.debug(`管理员用户具有所有权限，允许访问`);
+        return true;
+      }
+
+      // TODO: 实现更细粒度的权限检查逻辑
+      // 可以根据user.permissions检查用户是否拥有所需权限
+      this.logger.debug(`需要检查权限: ${requiredPermission}，暂时只有管理员拥有此权限`);
+      return false;
+    }
+
+    return true;
   }
 }

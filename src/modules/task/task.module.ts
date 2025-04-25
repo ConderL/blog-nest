@@ -6,9 +6,15 @@ import { VisitLog } from '../log/entities/visit-log.entity';
 import { TaskService } from './task.service';
 import { TaskController } from './task.controller';
 import { UserModule } from '../user/user.module';
+import { LogModule } from '../log/log.module';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), TypeOrmModule.forFeature([Article, VisitLog]), UserModule],
+  imports: [
+    ScheduleModule.forRoot(),
+    TypeOrmModule.forFeature([Article, VisitLog]),
+    UserModule,
+    LogModule,
+  ],
   controllers: [TaskController],
   providers: [TaskService],
   exports: [TaskService],

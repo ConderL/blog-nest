@@ -1,15 +1,37 @@
-import { Controller, Post, Get, UseGuards, Query, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  UseGuards,
+  Query,
+  Param,
+  Delete,
+  Body,
+  Logger,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TaskService } from './task.service';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Result } from '../../common/utils/result';
+import { LogService } from '../log/log.service';
 // 暂时注释掉权限相关导入
 // import { Permissions } from '../../common/decorators/permissions.decorator';
 // import { PermissionGuard } from '../../common/guards/permission.guard';
 
 @ApiTags('任务管理')
 @Controller('tasks')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('admin')
+@ApiBearerAuth()
 export class TaskController {
-  constructor(private readonly taskService: TaskService) {}
+  private readonly logger = new Logger(TaskController.name);
+
+  constructor(
+    private readonly taskService: TaskService,
+    private readonly logService: LogService,
+  ) {}
 
   @Post('backup')
   @ApiOperation({ summary: '手动触发数据备份' })
@@ -56,7 +78,13 @@ export class TaskController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   async getStatsSummary() {
-    return await this.taskService.getStatsSummary();
+    try {
+      const data = await this.taskService.getStatsSummary();
+      return Result.ok(data);
+    } catch (error) {
+      this.logger.error(`获取统计摘要失败: ${error.message}`);
+      return Result.fail('获取统计摘要失败');
+    }
   }
 
   @Get('stats/content')
@@ -78,5 +106,59 @@ export class TaskController {
   })
   async getVisitStats(@Query('period') period?: string) {
     return await this.taskService.getVisitStats(period);
+  }
+
+  @ApiOperation({ summary: '手动执行任务' })
+  @Post('run')
+  async runTask(@Body() data: { taskName: string; taskGroup?: string; invokeTarget: string }) {
+    try {
+      const { taskName, taskGroup = 'MANUAL', invokeTarget } = data;
+
+      // 记录任务开始日志
+      await this.logService.recordTaskLog({
+        taskName,
+        taskGroup,
+        invokeTarget,
+        taskMessage: `手动执行任务: ${taskName}`,
+        status: 1,
+      });
+
+      this.logger.log(`手动执行任务: ${taskName}, ${invokeTarget}`);
+
+      // 根据invokeTarget执行特定的任务
+      let result;
+      switch (invokeTarget) {
+        case 'taskService.manualBackup':
+          result = await this.taskService.manualBackup();
+          break;
+        case 'taskService.handleDataCleanup':
+          await this.taskService.handleDataCleanup();
+          result = '数据清理完成';
+          break;
+        case 'taskService.handleHourlyVisitStats':
+          await this.taskService.handleHourlyVisitStats();
+          result = '访问统计完成';
+          break;
+        default:
+          throw new Error(`未知的任务目标: ${invokeTarget}`);
+      }
+
+      return Result.ok(result, '任务执行成功');
+    } catch (error) {
+      // 记录失败日志
+      if (data) {
+        await this.logService.recordTaskLog({
+          taskName: data.taskName,
+          taskGroup: data.taskGroup || 'MANUAL',
+          invokeTarget: data.invokeTarget,
+          taskMessage: `手动执行任务失败: ${data.taskName}`,
+          status: 0,
+          errorInfo: error.message,
+        });
+      }
+
+      this.logger.error(`执行任务失败: ${error.message}`);
+      return Result.fail(`执行任务失败: ${error.message}`);
+    }
   }
 }
