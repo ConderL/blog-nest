@@ -8,9 +8,14 @@ import { Menu } from './entities/menu.entity';
 import { RoleMenu } from './entities/role-menu.entity';
 import * as bcrypt from 'bcryptjs';
 import { UploadService } from '../upload/services/upload/upload.service';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -23,6 +28,8 @@ export class UserService {
     @InjectRepository(RoleMenu)
     private readonly roleMenuRepository: Repository<RoleMenu>,
     private readonly uploadService: UploadService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -210,22 +217,40 @@ export class UserService {
    * 获取用户角色列表
    */
   async getUserRoles(userId: number): Promise<Role[]> {
+    this.logger.log(`获取用户角色, 用户ID: ${userId}`);
+
     // 查找用户-角色关联
     const userRoles = await this.userRoleRepository.find({
       where: { userId },
     });
 
     if (!userRoles || userRoles.length === 0) {
+      this.logger.warn(`未找到用户ID ${userId} 的角色关联记录`);
+
+      // 检查数据库中是否有任何用户角色关联
+      const totalUserRoles = await this.userRoleRepository.count();
+      this.logger.log(`数据库中共有 ${totalUserRoles} 条用户角色关联记录`);
+
       return [];
     }
 
+    this.logger.log(`找到 ${userRoles.length} 条用户角色关联记录: ${JSON.stringify(userRoles)}`);
+
     // 获取角色ID
     const roleIds = userRoles.map((ur) => ur.roleId);
+    this.logger.log(`用户 ${userId} 的角色IDs: ${roleIds.join(', ')}`);
 
     // 查询角色信息
-    return this.roleRepository.find({
+    const roles = await this.roleRepository.find({
       where: { id: In(roleIds) },
     });
+
+    this.logger.log(`查询到 ${roles.length} 个角色信息`);
+    roles.forEach((role) => {
+      this.logger.log(`- 角色: ${role.roleName} (ID: ${role.id})`);
+    });
+
+    return roles;
   }
 
   /**
@@ -274,7 +299,7 @@ export class UserService {
    * 获取用户菜单树
    */
   async getUserMenuTree(userId: number): Promise<any[]> {
-    console.log('UserService.getUserMenuTree - 获取用户菜单, 用户ID:', userId);
+    this.logger.log(`获取用户菜单树, 用户ID: ${userId}`);
 
     // 获取用户角色
     const userRoles = await this.userRoleRepository.find({
@@ -282,12 +307,12 @@ export class UserService {
     });
 
     if (!userRoles || userRoles.length === 0) {
-      console.log('UserService.getUserMenuTree - 未找到用户角色, 返回空数组');
+      this.logger.warn(`未找到用户ID ${userId} 的角色关联记录`);
       return [];
     }
 
     const roleIds = userRoles.map((ur) => ur.roleId);
-    console.log('UserService.getUserMenuTree - 找到用户角色IDs:', roleIds);
+    this.logger.log(`用户角色IDs: ${roleIds.join(', ')}`);
 
     // 查询这些角色所拥有的菜单ID
     const roleMenus = await this.roleMenuRepository.find({
@@ -295,16 +320,27 @@ export class UserService {
     });
 
     if (!roleMenus || roleMenus.length === 0) {
-      console.log('UserService.getUserMenuTree - 未找到角色菜单, 返回空数组');
+      this.logger.warn(`未找到角色IDs ${roleIds.join(', ')} 的菜单关联记录`);
+
+      // 检查数据库中是否有任何角色菜单关联
+      const totalRoleMenus = await this.roleMenuRepository.count();
+      this.logger.log(`数据库中共有 ${totalRoleMenus} 条角色菜单关联记录`);
+
+      // 随机取几条角色菜单关联记录作为样本
+      if (totalRoleMenus > 0) {
+        const sampleRoleMenus = await this.roleMenuRepository.find({ take: 5 });
+        this.logger.log(`角色菜单关联样本: ${JSON.stringify(sampleRoleMenus)}`);
+      }
+
       return [];
     }
 
     // 获取菜单ID
     const menuIds = roleMenus.map((rm) => rm.menuId);
-    console.log('UserService.getUserMenuTree - 菜单IDs数量:', menuIds.length);
+    this.logger.log(`找到 ${menuIds.length} 个菜单ID`);
 
-    // 查询菜单信息 - 只查询类型为M(目录)和C(菜单)的项，排除F(按钮)类型
-    // 并且排除is_hidden=1的菜单项
+    // 查询菜单信息 - 只查询类型为M(目录)和C(菜单)的项，排除B(按钮)类型
+    // 并且排除hidden=1的菜单项
     const menus = await this.menuRepository.find({
       where: {
         id: In(menuIds),
@@ -312,7 +348,7 @@ export class UserService {
       },
       order: { parentId: 'ASC', orderNum: 'ASC' },
     });
-    console.log('UserService.getUserMenuTree - 查询到菜单数量(仅目录和菜单):', menus.length);
+    this.logger.log(`查询到 ${menus.length} 个菜单项(仅目录和菜单)`);
 
     // 构建菜单树
     return this.buildMenuTree(menus);
@@ -655,6 +691,189 @@ export class UserService {
       await this.userRepository.save(user);
     } catch (error) {
       console.error('更新用户登录信息失败:', error);
+    }
+  }
+
+  /**
+   * 根据第三方登录信息查找用户
+   * @param sourceId 第三方平台用户标识
+   * @param loginType 登录类型 (1邮箱 2QQ 3Gitee 4Github)
+   */
+  async findUserByOauth(sourceId: string, loginType: number): Promise<User | null> {
+    try {
+      // 构建查询条件
+      let query = {};
+
+      // 根据登录类型和外部ID构建查询条件
+      if (loginType === 2) {
+        // QQ
+        query = { qqOpenId: sourceId, loginType };
+      } else if (loginType === 3) {
+        // Gitee
+        query = { giteeOpenId: sourceId, loginType };
+      } else if (loginType === 4) {
+        // GitHub
+        query = { githubOpenId: sourceId, loginType };
+      } else {
+        return null;
+      }
+
+      // 查询用户
+      return await this.userRepository.findOne({ where: query });
+    } catch (error) {
+      console.error('根据第三方登录信息查找用户失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 从第三方登录信息创建用户
+   * @param oauthInfo 第三方用户信息
+   */
+  async createUserFromOauth(oauthInfo: {
+    username: string;
+    nickname: string;
+    avatar: string;
+    email: string;
+    loginType: number;
+    sourceId: string;
+  }): Promise<User> {
+    try {
+      // 检查用户名是否已存在，如果存在则添加随机后缀
+      let uniqueUsername = oauthInfo.username;
+      let isUsernameUnique = false;
+      let attemptCount = 0;
+
+      while (!isUsernameUnique && attemptCount < 5) {
+        const existingUser = await this.userRepository.findOne({
+          where: { username: uniqueUsername },
+        });
+        if (!existingUser) {
+          isUsernameUnique = true;
+        } else {
+          // 添加随机后缀
+          uniqueUsername = `${oauthInfo.username}_${Math.floor(Math.random() * 10000)}`;
+          attemptCount++;
+        }
+      }
+
+      // 创建新用户对象
+      const newUser = this.userRepository.create({
+        username: uniqueUsername,
+        nickname: oauthInfo.nickname,
+        avatar: oauthInfo.avatar,
+        email: oauthInfo.email || '',
+        loginType: oauthInfo.loginType,
+        password: await bcrypt.hash(Math.random().toString(36).slice(2, 10), 10), // 随机密码
+        isDisable: 0,
+        createTime: new Date(),
+      });
+
+      // 根据登录类型设置对应的OpenID
+      if (oauthInfo.loginType === 2) {
+        // QQ
+        newUser.qqOpenId = oauthInfo.sourceId;
+      } else if (oauthInfo.loginType === 3) {
+        // Gitee
+        newUser.giteeOpenId = oauthInfo.sourceId;
+      } else if (oauthInfo.loginType === 4) {
+        // GitHub
+        newUser.githubOpenId = oauthInfo.sourceId;
+      }
+
+      // 保存用户
+      const savedUser = await this.userRepository.save(newUser);
+
+      // 为新用户添加角色
+      await this.addUserRole(savedUser.id);
+
+      return this.findById(savedUser.id);
+    } catch (error) {
+      console.error('创建第三方登录用户失败:', error);
+      throw new Error('创建用户失败: ' + error.message);
+    }
+  }
+
+  /**
+   * 生成JWT令牌
+   * @param user 用户对象
+   */
+  async generateToken(user: User): Promise<string> {
+    const payload = {
+      id: user.id,
+      username: user.username,
+      nickname: user.nickname,
+    };
+
+    const secret = this.configService.get('jwt.secret', 'blog_jwt_secret');
+    const expiresIn = this.configService.get('jwt.expiresIn', '7d');
+
+    return this.jwtService.sign(payload, {
+      secret,
+      expiresIn,
+    });
+  }
+
+  /**
+   * 创建默认管理员用户（如果不存在）
+   * 在应用启动时调用
+   */
+  async createDefaultAdminUser(): Promise<void> {
+    try {
+      const adminUsername = 'admin';
+
+      // 检查管理员用户是否已存在
+      const existingAdmin = await this.userRepository.findOne({
+        where: { username: adminUsername },
+      });
+
+      if (!existingAdmin) {
+        this.logger.log('创建默认管理员用户...');
+
+        // 创建管理员用户
+        const adminUser = this.userRepository.create({
+          username: adminUsername,
+          nickname: '管理员',
+          password: await bcrypt.hash('admin123', 10), // 默认密码
+          email: 'admin@example.com',
+          loginType: 1, // 邮箱登录
+          isDisable: 0, // 启用
+          createTime: new Date(),
+          avatar: '',
+        });
+
+        const savedAdmin = await this.userRepository.save(adminUser);
+
+        // 检查是否有管理员角色
+        let adminRole = await this.roleRepository.findOne({
+          where: { roleLabel: 'admin' },
+        });
+
+        // 如果没有管理员角色，创建一个
+        if (!adminRole) {
+          adminRole = this.roleRepository.create({
+            roleName: '管理员',
+            roleLabel: 'admin',
+            roleDesc: '系统管理员，拥有所有权限',
+            isDisable: 0,
+            createTime: new Date(),
+          });
+
+          adminRole = await this.roleRepository.save(adminRole);
+        }
+
+        // 为管理员用户分配管理员角色
+        const userRole = new UserRole();
+        userRole.userId = savedAdmin.id;
+        userRole.roleId = adminRole.id;
+        await this.userRoleRepository.save(userRole);
+
+        this.logger.log(`默认管理员用户创建成功，ID: ${savedAdmin.id}`);
+      } else {
+        this.logger.log('管理员用户已存在，无需创建');
+      }
+    } catch (error) {
+      this.logger.error('创建默认管理员用户失败:', error.message);
     }
   }
 }

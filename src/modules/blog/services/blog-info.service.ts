@@ -84,50 +84,24 @@ export class BlogInfoService {
     // 从数据库获取网站配置信息
     let [siteConfig] = await this.siteConfigRepository.find();
 
-    // 如果数据库中没有配置，使用默认配置
+    // 如果数据库中没有配置，尝试再次初始化
     if (!siteConfig) {
-      this.logger.warn('数据库中没有找到网站配置，使用默认配置');
-      siteConfig = {
-        id: 1,
-        userAvatar: 'http://img.conder.top/config/avatar.jpg',
-        touristAvatar: 'http://img.conder.top/config/default_avatar.jpg',
-        siteName: "Conder's blog",
-        siteAddress: 'https://www.conder.top',
-        siteIntro: '每天进步一点点。',
-        siteNotice: '后端基于NestJs开发，前端基于Vue3 Ts Navie UI开发',
-        createSiteTime: '2025-5-20',
-        recordNumber: '豫ICP备2024068028号-1',
-        authorAvatar: 'http://img.conder.top/config/avatar.jpg',
-        siteAuthor: '@ConderL',
-        articleCover: '',
-        aboutMe: '\uD83C\uDF40个人简介\n\n全栈开发工程师\n\n喜欢捣鼓一些新奇的东西',
-        github: 'https://github.com/ConderL',
-        bilibili: 'https://space.bilibili.com/180248324',
-        qq: '912277676',
-        commentCheck: 1,
-        messageCheck: 1,
-        isReward: true,
-        baiduCheck: 0,
-        weiXinCode: '',
-        aliCode: '',
-        emailNotice: true,
-        socialList: 'github,qq,bilibili',
-        loginList: '',
-        isMusic: true,
-        musicId: '13616943965',
-        isChat: true,
-        websocketUrl: 'wss://www.conder.top/websocket/',
-        archiveWallpaper: '',
-        categoryWallpaper: '',
-        tagWallpaper: '',
-        talkWallpaper: '',
-        albumWallpaper: '',
-        friendWallpaper: '',
-        messageWallpaper: '',
-        aboutWallpaper: '',
-        createTime: new Date(),
-        updateTime: new Date(),
-      } as SiteConfig;
+      this.logger.warn('数据库中没有找到网站配置，请确保数据库初始化正确');
+      // 重新查询一次，可能是因为刚刚初始化完成
+      [siteConfig] = await this.siteConfigRepository.find();
+
+      // 如果还是没有，则返回一个错误状态
+      if (!siteConfig) {
+        this.logger.error('站点配置获取失败');
+        return {
+          articleCount,
+          categoryCount,
+          tagCount,
+          viewCount: viewCount.toString(),
+          siteConfig: null,
+          error: '站点配置获取失败',
+        };
+      }
     }
 
     return {

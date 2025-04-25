@@ -19,6 +19,7 @@ import { promisify } from 'util';
 import * as config from '../../config/configuration';
 import { LogService } from '../log/log.service';
 import { OnlineService } from '../online/online.service';
+import { Task } from './entities/task.entity';
 
 const execAsync = promisify(exec);
 
@@ -33,6 +34,8 @@ export class TaskService {
     private readonly articleRepository: Repository<Article>,
     @InjectRepository(VisitLog)
     private readonly visitLogRepository: Repository<VisitLog>,
+    @InjectRepository(Task)
+    private readonly taskRepository: Repository<Task>,
     private readonly logService: LogService,
     private readonly onlineService: OnlineService,
   ) {
@@ -510,5 +513,97 @@ export class TaskService {
     }
 
     return result;
+  }
+
+  /**
+   * 获取所有任务
+   */
+  async getAllTasks(): Promise<Task[]> {
+    return this.taskRepository.find();
+  }
+
+  /**
+   * 根据ID获取任务
+   */
+  async getTaskById(id: number): Promise<Task> {
+    return this.taskRepository.findOne({ where: { id } });
+  }
+
+  /**
+   * 创建任务
+   */
+  async createTask(taskData: Partial<Task>): Promise<Task> {
+    const task = this.taskRepository.create({
+      ...taskData,
+      createTime: new Date(),
+    });
+    return this.taskRepository.save(task);
+  }
+
+  /**
+   * 更新任务
+   */
+  async updateTask(id: number, taskData: Partial<Task>): Promise<Task> {
+    await this.taskRepository.update(id, {
+      ...taskData,
+      updateTime: new Date(),
+    });
+    return this.getTaskById(id);
+  }
+
+  /**
+   * 删除任务
+   */
+  async deleteTask(id: number): Promise<boolean> {
+    const result = await this.taskRepository.delete(id);
+    return result.affected > 0;
+  }
+
+  /**
+   * 暂停/恢复任务
+   */
+  async toggleTaskStatus(id: number, status: number): Promise<Task> {
+    await this.taskRepository.update(id, {
+      status,
+      updateTime: new Date(),
+    });
+    return this.getTaskById(id);
+  }
+
+  /**
+   * 根据条件搜索任务
+   */
+  async searchTasks(params: {
+    taskName?: string;
+    taskGroup?: string;
+    status?: number;
+    current?: number;
+    size?: number;
+  }): Promise<{ list: Task[]; total: number }> {
+    const { taskName, taskGroup, status, current = 1, size = 10 } = params;
+
+    const queryBuilder = this.taskRepository.createQueryBuilder('task');
+
+    if (taskName) {
+      queryBuilder.andWhere('task.task_name LIKE :taskName', { taskName: `%${taskName}%` });
+    }
+
+    if (taskGroup) {
+      queryBuilder.andWhere('task.task_group = :taskGroup', { taskGroup });
+    }
+
+    if (status !== undefined) {
+      queryBuilder.andWhere('task.status = :status', { status });
+    }
+
+    const total = await queryBuilder.getCount();
+
+    const list = await queryBuilder
+      .orderBy('task.id', 'DESC')
+      .skip((current - 1) * size)
+      .take(size)
+      .getMany();
+
+    return { list, total };
   }
 }

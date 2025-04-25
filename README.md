@@ -538,3 +538,71 @@ pm2 restart blog-nest
    df -h
    ```
 
+## 第三方登录配置
+
+本项目支持 GitHub、Gitee 和 QQ 第三方登录，使用前需要在环境变量中配置相关参数：
+
+### 配置方式
+
+在项目根目录创建 `.env` 文件，添加以下配置：
+
+```bash
+# GitHub登录配置
+OAUTH_GITHUB_CLIENT_ID=your_github_client_id
+OAUTH_GITHUB_CLIENT_SECRET=your_github_client_secret
+OAUTH_GITHUB_REDIRECT_URL=http://localhost:3300/oauth/github/callback
+
+# Gitee登录配置
+OAUTH_GITEE_CLIENT_ID=your_gitee_client_id
+OAUTH_GITEE_CLIENT_SECRET=your_gitee_client_secret
+OAUTH_GITEE_REDIRECT_URL=http://localhost:3300/oauth/gitee/callback
+
+# QQ登录配置
+OAUTH_QQ_APP_ID=your_qq_app_id
+OAUTH_QQ_APP_KEY=your_qq_app_key
+OAUTH_QQ_REDIRECT_URL=http://localhost:3300/oauth/qq/callback
+```
+
+### 获取第三方平台的应用信息
+
+1. **GitHub**：
+   - 访问 [GitHub Developer Settings](https://github.com/settings/developers)
+   - 创建一个新的 OAuth App
+   - 填写应用名称、首页 URL 和授权回调 URL（如：`http://localhost:3300/oauth/github/callback`）
+
+2. **Gitee**：
+   - 访问 [Gitee 第三方应用管理](https://gitee.com/oauth/applications)
+   - 创建一个新的应用
+   - 填写应用名称、首页 URL 和授权回调 URL（如：`http://localhost:3300/oauth/gitee/callback`）
+
+3. **QQ**：
+   - 访问 [QQ互联管理中心](https://connect.qq.com/manage.html)
+   - 创建一个新的网站应用
+   - 填写应用名称、首页 URL 和授权回调 URL（如：`http://localhost:3300/oauth/qq/callback`）
+
+## 在线用户管理
+
+在线用户管理功能使用 Redis 存储用户会话信息，确保 Redis 服务已启动且配置正确：
+
+```bash
+# Redis配置
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+```
+
+### 功能说明
+
+1. **在线用户列表**：可通过 `/monitor/online` 接口获取当前在线用户列表
+2. **强制下线**：管理员可通过 `/monitor/online/:tokenId` 接口强制指定用户下线
+3. **用户会话管理**：可查看特定用户的所有会话
+4. **自动清理过期会话**：系统会自动清理长时间未活动的会话
+
+### API 接口
+
+- `GET /monitor/online` - 获取在线用户列表
+- `GET /monitor/online/count` - 获取在线用户数量
+- `GET /monitor/online/user/:userId` - 获取指定用户的所有会话
+- `DELETE /monitor/online/:tokenId` - 强制用户下线
+- `DELETE /monitor/online/expired` - 清除过期会话
+

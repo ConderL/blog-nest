@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 import { OauthService } from '../../services/oauth/oauth.service';
 import { ConfigService } from '@nestjs/config';
+import { OauthResultDto } from '../../dto/oauth-user.dto';
 
 @ApiTags('第三方登录')
 @Controller('oauth')
@@ -31,21 +32,27 @@ export class OauthController {
   @Get('github/callback')
   @ApiOperation({ summary: '处理GitHub回调' })
   @ApiQuery({ name: 'code', description: '授权码', required: true })
-  @ApiResponse({ status: HttpStatus.OK, description: 'GitHub登录成功' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'GitHub登录成功', type: OauthResultDto })
   async handleGithubCallback(@Query('code') code: string, @Res() res: Response) {
     try {
       // 获取用户信息
-      const userInfo = await this.oauthService.handleGithubCallback(code);
+      const result = await this.oauthService.handleGithubCallback(code);
 
       // 重定向到前端页面，带上用户信息
       const frontendUrl = this.configService.get('app.frontendUrl', 'http://localhost:3000');
-      const redirectUrl = `${frontendUrl}/oauth/callback?source=github&success=true&id=${userInfo.id}&name=${encodeURIComponent(userInfo.name)}&avatar=${encodeURIComponent(userInfo.avatar)}&email=${encodeURIComponent(userInfo.email || '')}`;
+      let redirectUrl = '';
+
+      if (result.success) {
+        redirectUrl = `${frontendUrl}/oauth/callback?success=true&source=github&token=${encodeURIComponent(result.token)}&userId=${result.userId}&username=${encodeURIComponent(result.username)}&nickname=${encodeURIComponent(result.nickname)}&avatar=${encodeURIComponent(result.avatar)}`;
+      } else {
+        redirectUrl = `${frontendUrl}/oauth/callback?success=false&source=github&message=${encodeURIComponent(result.message)}`;
+      }
 
       return res.redirect(redirectUrl);
     } catch (error) {
       // 登录失败，重定向到前端页面，带上错误信息
       const frontendUrl = this.configService.get('app.frontendUrl', 'http://localhost:3000');
-      const redirectUrl = `${frontendUrl}/oauth/callback?source=github&success=false&message=${encodeURIComponent(error.message)}`;
+      const redirectUrl = `${frontendUrl}/oauth/callback?success=false&source=github&message=${encodeURIComponent(error.message)}`;
 
       return res.redirect(redirectUrl);
     }
@@ -70,21 +77,27 @@ export class OauthController {
   @Get('gitee/callback')
   @ApiOperation({ summary: '处理Gitee回调' })
   @ApiQuery({ name: 'code', description: '授权码', required: true })
-  @ApiResponse({ status: HttpStatus.OK, description: 'Gitee登录成功' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Gitee登录成功', type: OauthResultDto })
   async handleGiteeCallback(@Query('code') code: string, @Res() res: Response) {
     try {
       // 获取用户信息
-      const userInfo = await this.oauthService.handleGiteeCallback(code);
+      const result = await this.oauthService.handleGiteeCallback(code);
 
       // 重定向到前端页面，带上用户信息
       const frontendUrl = this.configService.get('app.frontendUrl', 'http://localhost:3000');
-      const redirectUrl = `${frontendUrl}/oauth/callback?source=gitee&success=true&id=${userInfo.id}&name=${encodeURIComponent(userInfo.name)}&avatar=${encodeURIComponent(userInfo.avatar)}&email=${encodeURIComponent(userInfo.email || '')}`;
+      let redirectUrl = '';
+
+      if (result.success) {
+        redirectUrl = `${frontendUrl}/oauth/callback?success=true&source=gitee&token=${encodeURIComponent(result.token)}&userId=${result.userId}&username=${encodeURIComponent(result.username)}&nickname=${encodeURIComponent(result.nickname)}&avatar=${encodeURIComponent(result.avatar)}`;
+      } else {
+        redirectUrl = `${frontendUrl}/oauth/callback?success=false&source=gitee&message=${encodeURIComponent(result.message)}`;
+      }
 
       return res.redirect(redirectUrl);
     } catch (error) {
       // 登录失败，重定向到前端页面，带上错误信息
       const frontendUrl = this.configService.get('app.frontendUrl', 'http://localhost:3000');
-      const redirectUrl = `${frontendUrl}/oauth/callback?source=gitee&success=false&message=${encodeURIComponent(error.message)}`;
+      const redirectUrl = `${frontendUrl}/oauth/callback?success=false&source=gitee&message=${encodeURIComponent(error.message)}`;
 
       return res.redirect(redirectUrl);
     }
@@ -109,21 +122,27 @@ export class OauthController {
   @Get('qq/callback')
   @ApiOperation({ summary: '处理QQ回调' })
   @ApiQuery({ name: 'code', description: '授权码', required: true })
-  @ApiResponse({ status: HttpStatus.OK, description: 'QQ登录成功' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'QQ登录成功', type: OauthResultDto })
   async handleQQCallback(@Query('code') code: string, @Res() res: Response) {
     try {
       // 获取用户信息
-      const userInfo = await this.oauthService.handleQQCallback(code);
+      const result = await this.oauthService.handleQQCallback(code);
 
       // 重定向到前端页面，带上用户信息
       const frontendUrl = this.configService.get('app.frontendUrl', 'http://localhost:3000');
-      const redirectUrl = `${frontendUrl}/oauth/callback?source=qq&success=true&id=${userInfo.id}&name=${encodeURIComponent(userInfo.name)}&avatar=${encodeURIComponent(userInfo.avatar)}`;
+      let redirectUrl = '';
+
+      if (result.success) {
+        redirectUrl = `${frontendUrl}/oauth/callback?success=true&source=qq&token=${encodeURIComponent(result.token)}&userId=${result.userId}&username=${encodeURIComponent(result.username)}&nickname=${encodeURIComponent(result.nickname)}&avatar=${encodeURIComponent(result.avatar)}`;
+      } else {
+        redirectUrl = `${frontendUrl}/oauth/callback?success=false&source=qq&message=${encodeURIComponent(result.message)}`;
+      }
 
       return res.redirect(redirectUrl);
     } catch (error) {
       // 登录失败，重定向到前端页面，带上错误信息
       const frontendUrl = this.configService.get('app.frontendUrl', 'http://localhost:3000');
-      const redirectUrl = `${frontendUrl}/oauth/callback?source=qq&success=false&message=${encodeURIComponent(error.message)}`;
+      const redirectUrl = `${frontendUrl}/oauth/callback?success=false&source=qq&message=${encodeURIComponent(error.message)}`;
 
       return res.redirect(redirectUrl);
     }

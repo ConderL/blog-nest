@@ -199,61 +199,70 @@ export class AuthService {
         // 先通过邮箱查找用户
         const foundUser = await this.userService.findByEmail(loginDto.email);
         if (!foundUser) {
-          throw new NotFoundException('用户不存在');
+          this.logger.warn(`邮箱不存在: ${loginDto.email}`);
+          throw new NotFoundException('邮箱不存在');
         }
+
+        // 验证密码
         user = await this.validateUser(foundUser.username, loginDto.password);
       } else {
         throw new BadRequestException('请提供用户名或邮箱');
       }
 
-      // 生成JWT
-      const token = this.jwtService.sign({
-        username: user.username,
-        id: user.id,
-        roles: user.roles || [],
-      });
+      // 登录类型（1为普通登录）
+      const loginType = 1;
 
-      // 记录登录IP和时间
-      this.userService.updateLoginInfo(user.id, req);
+      // 生成token
+      const payload = { id: user.id, username: user.username, nickname: user.nickname };
+      const token = this.jwtService.sign(payload);
+
+      // 更新用户登录信息
+      await this.userService.updateLoginInfo(user.id, req);
 
       // 记录在线用户信息
-      if (req) {
-        const ipAddress = IPUtil.getIp(req);
-        const ipSource = await IPUtil.getIpSource(ipAddress);
+      const userAgent = req?.headers?.['user-agent'] || '';
+      const parser = new UAParser(userAgent);
+      const browser = parser.getBrowser().name + ' ' + parser.getBrowser().version;
+      const os = parser.getOS().name + ' ' + parser.getOS().version;
+      const ipAddress = IPUtil.getIp(req);
+      const ipSourcePromise = IPUtil.getIpSource(ipAddress);
+      // 等待 IP 来源获取完成
+      const ipSource = (await ipSourcePromise) || '未知';
 
-        // 解析UA获取浏览器和操作系统信息
-        const parser = new UAParser(req.headers['user-agent']);
-        const browser =
-          `${parser.getBrowser().name || ''} ${parser.getBrowser().version || ''}`.trim();
-        const os = `${parser.getOS().name || ''} ${parser.getOS().version || ''}`.trim();
+      const onlineUser: OnlineUserDto = {
+        tokenId: token,
+        userId: user.id,
+        username: user.username,
+        nickname: user.nickname,
+        avatar: user.avatar,
+        ipAddress,
+        ipSource,
+        browser,
+        os,
+        loginTime: new Date(),
+        lastAccessTime: new Date(),
+      };
 
-        // 创建在线用户记录
-        const onlineUser: OnlineUserDto = {
-          tokenId: token, // 使用JWT token作为唯一标识
-          userId: user.id,
-          username: user.username,
-          nickname: user.nickname,
-          avatar: user.avatar,
-          ipAddress,
-          ipSource,
-          browser,
-          os,
-          loginTime: new Date(),
-          lastAccessTime: new Date(),
-        };
-
-        await this.onlineService.addOnlineUser(onlineUser);
-      }
+      await this.onlineService.addOnlineUser(onlineUser);
 
       return ResultDto.success(
         {
           token,
-          user,
+          userInfo: {
+            id: user.id,
+            username: user.username,
+            nickname: user.nickname,
+            avatar: user.avatar,
+            email: user.email,
+            webSite: user.webSite,
+            intro: user.intro,
+            loginType,
+          },
         },
         '登录成功',
       );
     } catch (error) {
-      this.logger.error(`登录失败: ${error.message}`);
+      this.logger.error(`用户登录失败: ${error.message}`);
       throw error;
     }
   }
@@ -423,44 +432,42 @@ export class AuthService {
 
   /**
    * 用户退出登录
-   * @param token JWT令牌
    */
   async logout(token?: string): Promise<ResultDto<null>> {
-    if (token) {
-      try {
-        // 将令牌加入黑名单
-        await this.cacheManager.set(`blacklist:${token}`, true, 1000 * 60 * 60 * 24);
-        this.logger.log(`令牌已加入黑名单: ${token.substring(0, 20)}...`);
+    try {
+      this.logger.log('用户退出登录');
 
-        // 移除在线用户记录
+      // 如果提供了token，则移除在线用户记录
+      if (token) {
         await this.onlineService.removeOnlineUser(token);
-      } catch (error) {
-        this.logger.error(`退出登录失败: ${error.message}`);
+        this.logger.log(`已移除在线用户记录: ${token}`);
       }
-    }
 
-    return ResultDto.success(null, '退出成功');
+      return ResultDto.success(null, '退出成功');
+    } catch (error) {
+      this.logger.error(`退出登录失败: ${error.message}`);
+      throw new InternalServerErrorException('退出失败: ' + error.message);
+    }
   }
 
   /**
    * 管理员退出登录
-   * @param token JWT令牌
    */
   async adminLogout(token?: string): Promise<ResultDto<null>> {
-    if (token) {
-      try {
-        // 将令牌加入黑名单
-        await this.cacheManager.set(`blacklist:${token}`, true, 1000 * 60 * 60 * 24);
-        this.logger.log(`管理员令牌已加入黑名单: ${token.substring(0, 20)}...`);
+    try {
+      this.logger.log('管理员退出登录');
 
-        // 移除在线用户记录
+      // 如果提供了token，则移除在线用户记录
+      if (token) {
         await this.onlineService.removeOnlineUser(token);
-      } catch (error) {
-        this.logger.error(`管理员退出登录失败: ${error.message}`);
+        this.logger.log(`已移除在线用户记录: ${token}`);
       }
-    }
 
-    return ResultDto.success(null, '退出成功');
+      return ResultDto.success(null, '退出成功');
+    } catch (error) {
+      this.logger.error(`管理员退出登录失败: ${error.message}`);
+      throw new InternalServerErrorException('退出失败: ' + error.message);
+    }
   }
 
   /**

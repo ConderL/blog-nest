@@ -30,7 +30,8 @@
     "db:admin": "ts-node src/db-manager.ts admin",
     "db:menus": "ts-node src/db-manager.ts menus",
     "db:all": "ts-node src/db-manager.ts all",
-    "db:docker-init": "nest build && node dist/database-init.js"
+    "db:docker-init": "nest build && node dist/database-init.js",
+    "db:migrate:init": "npm run migration:run"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^9.0.0",

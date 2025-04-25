@@ -34,6 +34,7 @@ import { LogModule } from './modules/log/log.module';
 import { OnlineModule } from './modules/online/online.module';
 
 import configuration from './config/configuration';
+import { createTypeOrmOptions } from './config/database.config';
 
 @Module({
   imports: [
@@ -51,19 +52,7 @@ import configuration from './config/configuration';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mysql',
-        host: configService.get('DB_HOST', 'localhost'),
-        port: configService.get<number>('DB_PORT', 3306),
-        username: configService.get('DB_USERNAME', 'root'),
-        password: configService.get('DB_PASSWORD', 'root'),
-        database: configService.get('DB_DATABASE', 'blog'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: configService.get<boolean>('DB_SYNCHRONIZE', false),
-        logging: configService.get<boolean>('DB_LOGGING', false),
-        timezone: '+08:00',
-        charset: 'utf8mb4',
-      }),
+      useFactory: createTypeOrmOptions,
     }),
     // 业务模块
     EmailModule,

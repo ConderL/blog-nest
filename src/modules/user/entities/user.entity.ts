@@ -38,4 +38,13 @@ export class User extends BaseEntity {
 
   @Column({ name: 'login_time', type: 'timestamp', nullable: true })
   loginTime: Date;
+
+  @Column({ name: 'qq_open_id', length: 100, nullable: true })
+  qqOpenId: string;
+
+  @Column({ name: 'gitee_open_id', length: 100, nullable: true })
+  giteeOpenId: string;
+
+  @Column({ name: 'github_open_id', length: 100, nullable: true })
+  githubOpenId: string;
 }

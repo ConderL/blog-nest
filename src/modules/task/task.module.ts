@@ -8,11 +8,12 @@ import { TaskController } from './task.controller';
 import { UserModule } from '../user/user.module';
 import { LogModule } from '../log/log.module';
 import { OnlineModule } from '../online/online.module';
+import { Task } from './entities/task.entity';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    TypeOrmModule.forFeature([Article, VisitLog]),
+    TypeOrmModule.forFeature([Article, VisitLog, Task]),
     UserModule,
     LogModule,
     OnlineModule,

@@ -1,10 +1,7 @@
-import { Entity, PrimaryColumn, PrimaryGeneratedColumn } from 'typeorm';
+import { Entity, PrimaryColumn } from 'typeorm';
 
 @Entity('t_role_menu')
 export class RoleMenu {
-  @PrimaryGeneratedColumn()
-  id: number;
-
   @PrimaryColumn({ name: 'role_id' })
   roleId: number;
 

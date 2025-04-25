@@ -1,4 +1,4 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { OnlineService } from '../../modules/online/online.service';
@@ -9,29 +9,32 @@ import { OnlineService } from '../../modules/online/online.service';
  */
 @Injectable()
 export class OnlineUserInterceptor implements NestInterceptor {
-  private readonly logger = new Logger(OnlineUserInterceptor.name);
-
   constructor(private readonly onlineService: OnlineService) {}
 
-  /**
-   * 拦截请求
-   * @param context 执行上下文
-   * @param next 调用处理器
-   */
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+  async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
+    // 获取请求对象
     const request = context.switchToHttp().getRequest();
 
-    // 获取请求中的token
+    // 从请求头中获取令牌
     const authHeader = request.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
 
       // 异步更新用户最后访问时间
-      this.onlineService.updateLastAccessTime(token).catch((error) => {
-        this.logger.error(`更新用户最后访问时间失败: ${error.message}`);
-      });
+      setTimeout(async () => {
+        try {
+          await this.onlineService.updateLastAccessTime(token);
+        } catch (error) {
+          console.error('更新用户最后访问时间失败:', error);
+        }
+      }, 0);
     }
 
-    return next.handle();
+    // 继续处理请求
+    return next.handle().pipe(
+      tap(() => {
+        // 请求完成后的操作（如有需要）
+      }),
+    );
   }
 }
