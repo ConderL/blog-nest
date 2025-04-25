@@ -18,6 +18,7 @@ import { Roles } from '../../../common/decorators/roles.decorator';
 import { Result } from '../../../common/utils/result';
 import { LogService } from '../../log/log.service';
 import { Task } from './entities/task.entity';
+import { TaskRunDto } from './dto/task-run.dto';
 // 暂时注释掉权限相关导入
 // import { Permissions } from '../../common/decorators/permissions.decorator';
 // import { PermissionGuard } from '../../common/guards/permission.guard';
@@ -58,7 +59,7 @@ export class TaskController {
         size,
       });
       return Result.ok({
-        list,
+        recordList: list,
         pagination: {
           total,
           size,
@@ -120,12 +121,14 @@ export class TaskController {
     }
   }
 
-  @Delete('delete/:id')
+  @Delete('delete/:ids')
   @ApiOperation({ summary: '删除定时任务' })
-  async deleteTask(@Param('id') id: number) {
+  async deleteTask(@Param('ids') idsStr: string) {
     try {
-      const result = await this.taskService.deleteTask(id);
-      return Result.ok(null, result ? '删除任务成功' : '删除任务失败');
+      const ids = idsStr.split(',').map((id) => parseInt(id, 10));
+      const results = await Promise.all(ids.map((id) => this.taskService.deleteTask(id)));
+      const success = results.every((result) => result);
+      return Result.ok(null, success ? '删除任务成功' : '部分任务删除失败');
     } catch (error) {
       this.logger.error(`删除任务失败: ${error.message}`);
       return Result.fail(`删除任务失败: ${error.message}`);
@@ -241,7 +244,8 @@ export class TaskController {
 
   @ApiOperation({ summary: '手动执行任务' })
   @Post('run')
-  async runTask(@Body() data: { taskName: string; taskGroup?: string; invokeTarget: string }) {
+  @ApiBody({ type: TaskRunDto })
+  async runTask(@Body() data: TaskRunDto) {
     try {
       const { taskName, taskGroup = 'MANUAL', invokeTarget } = data;
 
@@ -256,38 +260,25 @@ export class TaskController {
 
       this.logger.log(`手动执行任务: ${taskName}, ${invokeTarget}`);
 
-      // 根据invokeTarget执行特定的任务
+      // 执行任务
       let result;
-      switch (invokeTarget) {
-        case 'taskService.manualBackup':
-          result = await this.taskService.manualBackup();
-          break;
-        case 'taskService.handleDataCleanup':
-          await this.taskService.handleDataCleanup();
-          result = '数据清理完成';
-          break;
-        case 'taskService.handleHourlyVisitStats':
-          await this.taskService.handleHourlyVisitStats();
-          result = '访问统计完成';
-          break;
-        default:
-          throw new Error(`未知的任务目标: ${invokeTarget}`);
+      try {
+        result = await this.taskService.executeTask(invokeTarget);
+      } catch (error) {
+        // 记录失败日志
+        await this.logService.recordTaskLog({
+          taskName,
+          taskGroup,
+          invokeTarget,
+          taskMessage: `手动执行任务失败: ${taskName}`,
+          status: 0,
+          errorInfo: error.message,
+        });
+        throw error;
       }
 
       return Result.ok(result, '任务执行成功');
     } catch (error) {
-      // 记录失败日志
-      if (data) {
-        await this.logService.recordTaskLog({
-          taskName: data.taskName,
-          taskGroup: data.taskGroup || 'MANUAL',
-          invokeTarget: data.invokeTarget,
-          taskMessage: `手动执行任务失败: ${data.taskName}`,
-          status: 0,
-          errorInfo: error.message,
-        });
-      }
-
       this.logger.error(`执行任务失败: ${error.message}`);
       return Result.fail(`执行任务失败: ${error.message}`);
     }

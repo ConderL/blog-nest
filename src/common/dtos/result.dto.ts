@@ -4,7 +4,6 @@ import { StatusCodeEnum } from '../enums/status-code.enum';
 /**
  * 统一API响应格式
  *
- * 用于所有API返回结果的标准格式，与blog-boot返回结果保持一致
  */
 export class ResultDto<T> {
   /**

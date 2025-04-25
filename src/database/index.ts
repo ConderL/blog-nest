@@ -6,11 +6,13 @@ import { RoleMenu } from '../modules/user/entities/role-menu.entity';
 import { User } from '../modules/user/entities/user.entity';
 import { UserRole } from '../modules/user/entities/user-role.entity';
 import { SiteConfig } from '../modules/blog/entities/site-config.entity';
+import { Task } from '../modules/admin/task/entities/task.entity';
 import { initMenus } from './menu';
 import { initRoles } from './role';
 import { initRoleMenus } from './role-menu';
 import { initUsers } from './user';
 import { initSiteConfig } from './site-config';
+import { insertTasks } from './task';
 
 /**
  * 初始化数据库数据
@@ -53,14 +55,18 @@ export async function initDatabase(dataSource: DataSource): Promise<void> {
     logger.log('5. 开始初始化站点配置数据...');
     await initSiteConfig(dataSource.getRepository(SiteConfig));
 
+    logger.log('6. 开始初始化定时任务数据...');
+    await insertTasks(dataSource);
+
     // 验证最终结果
     const userCount = await dataSource.getRepository(User).count();
     const userRoleCount = await dataSource.getRepository(UserRole).count();
     const roleMenuCount = await dataSource.getRepository(RoleMenu).count();
     const siteConfigCount = await dataSource.getRepository(SiteConfig).count();
+    const taskCount = await dataSource.getRepository(Task).count();
 
     logger.log(
-      `数据库初始化完成! 统计: 菜单(${menuCount}), 角色(${roleCount}), 用户(${userCount}), 用户角色关系(${userRoleCount}), 角色菜单关系(${roleMenuCount}), 站点配置(${siteConfigCount})`,
+      `数据库初始化完成! 统计: 菜单(${menuCount}), 角色(${roleCount}), 用户(${userCount}), 用户角色关系(${userRoleCount}), 角色菜单关系(${roleMenuCount}), 站点配置(${siteConfigCount}), 定时任务(${taskCount})`,
     );
   } catch (error) {
     logger.error('数据库初始化失败: ' + error.message);
