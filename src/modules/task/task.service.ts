@@ -580,20 +580,33 @@ export class TaskService {
     current?: number;
     size?: number;
   }): Promise<{ list: Task[]; total: number }> {
-    const { taskName, taskGroup, status, current = 1, size = 10 } = params;
+    const { taskName, taskGroup, status } = params;
+    const current = Number(params.current) || 1;
+    const size = Number(params.size) || 10;
+
+    this.logger.debug(
+      `搜索任务参数: ${JSON.stringify({
+        taskName,
+        taskGroup,
+        status: status !== undefined ? Number(status) : undefined,
+        current,
+        size,
+      })}`,
+    );
 
     const queryBuilder = this.taskRepository.createQueryBuilder('task');
 
     if (taskName) {
-      queryBuilder.andWhere('task.task_name LIKE :taskName', { taskName: `%${taskName}%` });
+      queryBuilder.andWhere('task.taskName LIKE :taskName', { taskName: `%${taskName}%` });
     }
 
     if (taskGroup) {
-      queryBuilder.andWhere('task.task_group = :taskGroup', { taskGroup });
+      queryBuilder.andWhere('task.taskGroup = :taskGroup', { taskGroup });
     }
 
-    if (status !== undefined) {
-      queryBuilder.andWhere('task.status = :status', { status });
+    if (status !== undefined && status !== null && !isNaN(Number(status))) {
+      const statusNumber = Number(status);
+      queryBuilder.andWhere('task.status = :status', { status: statusNumber });
     }
 
     const total = await queryBuilder.getCount();
