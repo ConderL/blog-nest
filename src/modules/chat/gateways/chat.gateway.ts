@@ -68,9 +68,19 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     // 生成随机昵称
     const randomNickname = NicknameGenerator.getNickname(ip);
 
-    // 为当前socket设置IP和昵称
+    // 尝试获取IP归属地
+    let ipSource = '未知';
+    try {
+      ipSource = await this.ipService.getIpLocation(ip);
+    } catch (error) {
+      this.logger.error(`获取IP地理位置失败: ${error.message}`);
+    }
+
+    // 为当前socket设置数据
     client.data.ip = ip;
     client.data.nickname = randomNickname;
+    client.data.ipSource = ipSource;
+    client.data.connectTime = new Date();
 
     // 发送IP和随机昵称给客户端
     client.emit('init', {
@@ -246,5 +256,43 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   handleHeartbeat(/* @ConnectedSocket() client: Socket */) {
     // 简单地返回一个响应，表示服务器仍然活跃
     return { timestamp: Date.now() };
+  }
+
+  /**
+   * 获取当前所有客户端连接
+   * @returns 客户端连接列表
+   */
+  getClients(): Socket[] {
+    return this.clients;
+  }
+
+  /**
+   * 获取当前在线人数
+   * @returns 在线人数
+   */
+  getOnlineCount(): number {
+    return this.clients.length;
+  }
+
+  /**
+   * 断开指定客户端连接
+   * @param socketId 客户端ID
+   * @returns 是否成功断开连接
+   */
+  disconnectClient(socketId: string): boolean {
+    try {
+      // 查找对应的客户端
+      const client = this.clients.find((c) => c.id === socketId);
+      if (!client) {
+        return false;
+      }
+
+      // 断开连接
+      client.disconnect(true);
+      return true;
+    } catch (error) {
+      this.logger.error(`断开客户端连接失败: ${error.message}`);
+      return false;
+    }
   }
 }

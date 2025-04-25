@@ -25,11 +25,13 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { VisitLogInterceptor } from './common/interceptors/visit-log.interceptor';
 import { OperationLogInterceptor } from './common/interceptors/operation-log.interceptor';
+import { OnlineUserInterceptor } from './common/interceptors/online-user.interceptor';
 import {
   AllExceptionsFilter,
   HttpExceptionFilter,
 } from './common/exceptions/http.exception.filter';
 import { LogModule } from './modules/log/log.module';
+import { OnlineModule } from './modules/online/online.module';
 
 import configuration from './config/configuration';
 
@@ -79,6 +81,7 @@ import configuration from './config/configuration';
     }),
     ChatModule,
     ToolsModule,
+    OnlineModule,
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),
       exclude: ['/api*'],
@@ -116,6 +119,11 @@ import configuration from './config/configuration';
     {
       provide: APP_INTERCEPTOR,
       useClass: OperationLogInterceptor,
+    },
+    // 在线用户拦截器
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: OnlineUserInterceptor,
     },
     // 全局异常过滤器
     {

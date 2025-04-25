@@ -18,6 +18,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as config from '../../config/configuration';
 import { LogService } from '../log/log.service';
+import { OnlineService } from '../online/online.service';
 
 const execAsync = promisify(exec);
 
@@ -33,6 +34,7 @@ export class TaskService {
     @InjectRepository(VisitLog)
     private readonly visitLogRepository: Repository<VisitLog>,
     private readonly logService: LogService,
+    private readonly onlineService: OnlineService,
   ) {
     this.logger.log('TaskService initialized');
     // 确保备份目录存在
@@ -146,6 +148,26 @@ export class TaskService {
       this.logger.log(`已清理 ${result.affected || 0} 条过期访问日志`);
       return result;
     });
+  }
+
+  /**
+   * 每5分钟执行一次，清理过期的在线用户会话
+   * 过期时间为30分钟
+   */
+  @Cron('0 */5 * * * *')
+  async handleExpiredSessions() {
+    await this.executeWithLog(
+      '清理过期会话',
+      'SYSTEM',
+      'taskService.handleExpiredSessions',
+      async () => {
+        this.logger.log('清理过期的在线用户会话...');
+        const expireTime = 30 * 60 * 1000; // 30分钟未活动的会话视为过期
+        const removedCount = await this.onlineService.clearExpiredSessions(expireTime);
+        this.logger.log(`已清理 ${removedCount} 个过期会话`);
+        return removedCount;
+      },
+    );
   }
 
   /**

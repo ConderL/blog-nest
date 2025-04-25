@@ -114,4 +114,14 @@ export class IpService {
 
     return '未知';
   }
+
+  /**
+   * 获取IP地址对应的地理位置
+   * 作为 getIpSource 的别名
+   * @param ip IP地址
+   * @returns 地理位置
+   */
+  async getIpLocation(ip: string): Promise<string> {
+    return this.getIpSource(ip);
+  }
 }

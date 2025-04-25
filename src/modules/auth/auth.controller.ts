@@ -8,6 +8,7 @@ import {
   Request,
   Get,
   Query,
+  Req,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -34,8 +35,8 @@ export class AuthController {
   @ApiOperation({ summary: '用户登录' })
   @Public()
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(@Body() loginDto: LoginDto, @Req() req) {
+    return this.authService.login(loginDto, req);
   }
 
   @Get('logout')

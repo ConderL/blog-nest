@@ -618,4 +618,43 @@ export class UserService {
       throw new Error('获取用户列表失败: ' + error.message);
     }
   }
+
+  /**
+   * 更新用户登录信息
+   * @param userId 用户ID
+   * @param req 请求对象
+   */
+  async updateLoginInfo(userId: number, req?: any): Promise<void> {
+    if (!userId || !req) return;
+
+    try {
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) return;
+
+      // 提取IP地址
+      let ipAddress = req.ip;
+      if (req.headers && req.headers['x-forwarded-for']) {
+        const forwardedIps = req.headers['x-forwarded-for'].split(',');
+        ipAddress = forwardedIps[0].trim();
+      }
+
+      // 更新用户登录信息
+      user.ipAddress = ipAddress || user.ipAddress;
+      user.loginTime = new Date();
+
+      // 获取IP来源
+      try {
+        const { IPUtil } = await import('../../common/utils/ip.util');
+        if (ipAddress) {
+          user.ipSource = await IPUtil.getIpSource(ipAddress);
+        }
+      } catch (error) {
+        console.error('获取IP来源失败:', error);
+      }
+
+      await this.userRepository.save(user);
+    } catch (error) {
+      console.error('更新用户登录信息失败:', error);
+    }
+  }
 }

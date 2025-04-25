@@ -20,6 +20,11 @@ import { QueueService } from '../queue/services/queue/queue.service';
 import { randomBytes } from 'crypto';
 import * as forge from 'node-forge';
 import { RegisterDto } from './dto/register.dto';
+import { OnlineService } from '../online/online.service';
+import { OnlineUserDto } from '../online/dto/online-user.dto';
+import { Request } from 'express';
+import { IPUtil } from '../../common/utils/ip.util';
+import { UAParser } from 'ua-parser-js';
 /**
  * 解密密码
  */
@@ -107,6 +112,7 @@ export class AuthService {
     private readonly captchaService: CaptchaService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly queueService: QueueService,
+    private readonly onlineService: OnlineService,
   ) {}
 
   /**
@@ -166,7 +172,7 @@ export class AuthService {
   /**
    * 用户登录
    */
-  async login(loginDto: LoginDto): Promise<ResultDto<any>> {
+  async login(loginDto: LoginDto, req?: Request): Promise<ResultDto<any>> {
     const username = loginDto.username || loginDto.email;
     this.logger.log(`用户登录请求: ${username}`);
 
@@ -200,33 +206,55 @@ export class AuthService {
         throw new BadRequestException('请提供用户名或邮箱');
       }
 
-      this.logger.log(`用户验证成功: ${user.username}`);
-
-      // 生成JWT令牌
-      const payload = { username: user.username, sub: user.id };
-      const token = this.jwtService.sign(payload);
-      this.logger.log(`生成JWT令牌: ${token.substring(0, 20)}...，长度: ${token.length}`);
-
-      // 获取用户角色
-      const roleList = await this.userService.getUserRoles(user.id);
-      this.logger.log(`获取到用户角色: ${JSON.stringify(roleList)}`);
-
-      // 组装用户信息
-      const userInfo = {
-        id: user.id,
+      // 生成JWT
+      const token = this.jwtService.sign({
         username: user.username,
-        nickname: user.nickname || user.username,
-        avatar: user.avatar || 'http://img.conder.top/config/default_avatar.jpg',
-        email: user.email || loginDto.email,
-        roleList: roleList,
-        token: token,
-      };
+        id: user.id,
+        roles: user.roles || [],
+      });
 
-      this.logger.log(`用户登录成功: ${user.username}`);
-      return ResultDto.success(userInfo);
+      // 记录登录IP和时间
+      this.userService.updateLoginInfo(user.id, req);
+
+      // 记录在线用户信息
+      if (req) {
+        const ipAddress = IPUtil.getIp(req);
+        const ipSource = await IPUtil.getIpSource(ipAddress);
+
+        // 解析UA获取浏览器和操作系统信息
+        const parser = new UAParser(req.headers['user-agent']);
+        const browser =
+          `${parser.getBrowser().name || ''} ${parser.getBrowser().version || ''}`.trim();
+        const os = `${parser.getOS().name || ''} ${parser.getOS().version || ''}`.trim();
+
+        // 创建在线用户记录
+        const onlineUser: OnlineUserDto = {
+          tokenId: token, // 使用JWT token作为唯一标识
+          userId: user.id,
+          username: user.username,
+          nickname: user.nickname,
+          avatar: user.avatar,
+          ipAddress,
+          ipSource,
+          browser,
+          os,
+          loginTime: new Date(),
+          lastAccessTime: new Date(),
+        };
+
+        await this.onlineService.addOnlineUser(onlineUser);
+      }
+
+      return ResultDto.success(
+        {
+          token,
+          user,
+        },
+        '登录成功',
+      );
     } catch (error) {
-      this.logger.error(`用户登录失败: ${error.message}`);
-      return ResultDto.fail(error.message, error.status || 400);
+      this.logger.error(`登录失败: ${error.message}`);
+      throw error;
     }
   }
 
@@ -394,41 +422,45 @@ export class AuthService {
   }
 
   /**
-   * 管理员登出
+   * 用户退出登录
+   * @param token JWT令牌
    */
-  async adminLogout(token?: string): Promise<ResultDto<null>> {
-    this.logger.log(`管理员登出请求，token: ${token?.slice(0, 10)}...`);
-    try {
-      // 添加到黑名单
-      if (token) {
-        await this.cacheManager.set(`blocked_token:${token}`, 1, 60 * 60 * 24);
-        this.logger.log(`Token已添加到黑名单: ${token.slice(0, 10)}...`);
-        return ResultDto.success(null, '退出登录成功');
+  async logout(token?: string): Promise<ResultDto<null>> {
+    if (token) {
+      try {
+        // 将令牌加入黑名单
+        await this.cacheManager.set(`blacklist:${token}`, true, 1000 * 60 * 60 * 24);
+        this.logger.log(`令牌已加入黑名单: ${token.substring(0, 20)}...`);
+
+        // 移除在线用户记录
+        await this.onlineService.removeOnlineUser(token);
+      } catch (error) {
+        this.logger.error(`退出登录失败: ${error.message}`);
       }
-      return ResultDto.fail('Token无效');
-    } catch (error) {
-      this.logger.error(`管理员登出失败: ${error.message}`);
-      return ResultDto.fail(error.message);
     }
+
+    return ResultDto.success(null, '退出成功');
   }
 
   /**
-   * 用户登出
+   * 管理员退出登录
+   * @param token JWT令牌
    */
-  async logout(token?: string): Promise<ResultDto<null>> {
-    this.logger.log(`用户登出请求，token: ${token?.slice(0, 10)}...`);
-    try {
-      // 添加到黑名单
-      if (token) {
-        await this.cacheManager.set(`blocked_token:${token}`, 1, 60 * 60 * 24);
-        this.logger.log(`Token已添加到黑名单: ${token.slice(0, 10)}...`);
-        return ResultDto.success(null, '退出登录成功');
+  async adminLogout(token?: string): Promise<ResultDto<null>> {
+    if (token) {
+      try {
+        // 将令牌加入黑名单
+        await this.cacheManager.set(`blacklist:${token}`, true, 1000 * 60 * 60 * 24);
+        this.logger.log(`管理员令牌已加入黑名单: ${token.substring(0, 20)}...`);
+
+        // 移除在线用户记录
+        await this.onlineService.removeOnlineUser(token);
+      } catch (error) {
+        this.logger.error(`管理员退出登录失败: ${error.message}`);
       }
-      return ResultDto.fail('Token无效');
-    } catch (error) {
-      this.logger.error(`用户登出失败: ${error.message}`);
-      return ResultDto.fail(error.message);
     }
+
+    return ResultDto.success(null, '退出成功');
   }
 
   /**

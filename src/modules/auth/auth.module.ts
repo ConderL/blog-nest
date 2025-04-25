@@ -10,6 +10,7 @@ import { CaptchaModule } from '../captcha/captcha.module';
 import { QueueModule } from '../queue/queue.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { redisStore } from 'cache-manager-redis-yet';
+import { OnlineModule } from '../online/online.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { redisStore } from 'cache-manager-redis-yet';
     CaptchaModule,
     ConfigModule,
     QueueModule,
+    OnlineModule,
     CacheModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

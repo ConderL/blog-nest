@@ -195,6 +195,16 @@ export class IPUtil {
       return '未知位置';
     }
   }
+
+  /**
+   * 获取IP
+   * 作为 getClientIp 的别名，用于从请求中提取IP地址
+   * @param request 请求对象
+   * @returns IP地址
+   */
+  static getIp(request: Request): string {
+    return this.getClientIp(request);
+  }
 }
 
 // 导出实例以便于单例使用

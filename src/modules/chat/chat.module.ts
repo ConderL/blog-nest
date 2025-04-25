@@ -8,6 +8,8 @@ import { HttpModule, HttpService } from '@nestjs/axios';
 import { IpService } from '../../services/ip.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ToolsModule } from '../tools/tools.module';
+import { OnlineUserService } from './services/online-user.service';
+import { OnlineUserController } from './controllers/online-user.controller';
 
 /**
  * 聊天模块
@@ -17,6 +19,7 @@ import { ToolsModule } from '../tools/tools.module';
   providers: [
     ChatService,
     ChatGateway,
+    OnlineUserService,
     {
       provide: IpService,
       useFactory: (httpService: HttpService, configService: ConfigService) => {
@@ -25,7 +28,7 @@ import { ToolsModule } from '../tools/tools.module';
       inject: [HttpService, ConfigService],
     },
   ],
-  controllers: [ChatController],
-  exports: [ChatService],
+  controllers: [ChatController, OnlineUserController],
+  exports: [ChatService, OnlineUserService, ChatGateway],
 })
 export class ChatModule {}

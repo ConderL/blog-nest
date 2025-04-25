@@ -7,6 +7,7 @@ import { TaskService } from './task.service';
 import { TaskController } from './task.controller';
 import { UserModule } from '../user/user.module';
 import { LogModule } from '../log/log.module';
+import { OnlineModule } from '../online/online.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { LogModule } from '../log/log.module';
     TypeOrmModule.forFeature([Article, VisitLog]),
     UserModule,
     LogModule,
+    OnlineModule,
   ],
   controllers: [TaskController],
   providers: [TaskService],
