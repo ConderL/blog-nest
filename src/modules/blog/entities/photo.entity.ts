@@ -20,13 +20,13 @@ export class Photo {
   /**
    * 照片URL
    */
-  @Column({ name: 'photo_url', comment: '照片URL', length: 255 })
+  @Column({ name: 'photo_url', comment: '照片URL', type: 'text' })
   photoUrl: string;
 
   /**
    * 照片名称
    */
-  @Column({ name: 'photo_name', comment: '照片名称', length: 20 })
+  @Column({ name: 'photo_name', comment: '照片名称', type: 'text' })
   photoName: string;
 
   /**

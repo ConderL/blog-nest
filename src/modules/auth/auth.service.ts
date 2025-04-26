@@ -429,7 +429,7 @@ export class AuthService {
       return ResultDto.success(userInfo); // 返回完整的用户信息，包括token
     } catch (error) {
       this.logger.error(`管理员登录失败: ${error.message}`);
-      return ResultDto.fail(error.message, error.status || 400);
+      return ResultDto.fail(error.message, 400);
     }
   }
 
