@@ -3,7 +3,6 @@ import {
   Get,
   Delete,
   Query,
-  UseGuards,
   Logger,
   Body,
   ValidationPipe,
@@ -12,8 +11,6 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { OperationLogService } from '../services/operation-log.service';
 import { DeleteOperationLogDto, QueryOperationLogDto } from '../dto/operation-log.dto';
@@ -26,7 +23,6 @@ import { OperationType } from '../../../common/enums/operation-type.enum';
  */
 @ApiTags('管理员操作日志相关接口')
 @Controller('admin/operation')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 @ApiBearerAuth()
 export class AdminOperationLogController {

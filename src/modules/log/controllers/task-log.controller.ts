@@ -12,7 +12,6 @@ import { RequirePermission } from '../../../common/decorators/require-permission
 
 @ApiTags('任务日志管理')
 @Controller('log/task')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 @ApiBearerAuth()
 export class TaskLogController {

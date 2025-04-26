@@ -24,7 +24,6 @@ import { OperationType } from '../../../common/enums/operation-type.enum';
  */
 @ApiTags('管理员分类管理')
 @Controller('admin/category')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 @ApiBearerAuth()
 export class AdminCategoryController {

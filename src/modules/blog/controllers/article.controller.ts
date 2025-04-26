@@ -40,6 +40,7 @@ import { Cache } from 'cache-manager';
 import { CommentService } from '../services/comment.service';
 import { Response } from 'express';
 import { ArticleSearch } from '../dtos/article-search.dto';
+import { SiteConfig } from '../entities/site-config.entity';
 
 // 前台文章控制器
 @ApiTags('文章')
@@ -54,6 +55,8 @@ export class ArticleController {
     private readonly categoryRepository: Repository<Category>,
     @InjectRepository(Tag)
     private readonly tagRepository: Repository<Tag>,
+    @InjectRepository(SiteConfig)
+    private readonly siteConfigRepository: Repository<SiteConfig>,
   ) {}
 
   @Post()
@@ -65,6 +68,12 @@ export class ArticleController {
     @Body() createArticleDto: CreateArticleDto,
     @Body('tagIds') tagIds: number[],
   ): Promise<ResultDto<Article>> {
+    // 如果没有提供封面，使用站点配置中的默认封面
+    if (!createArticleDto.cover || createArticleDto.cover.trim() === '') {
+      const [siteConfig] = await this.siteConfigRepository.find();
+      createArticleDto.cover = siteConfig.articleCover;
+    }
+
     const article: Partial<Article> = {
       articleTitle: createArticleDto.title,
       articleContent: createArticleDto.content,
@@ -210,6 +219,8 @@ export class AdminArticleController {
     @InjectRepository(Category) private readonly categoryRepository: Repository<Category>,
     @InjectRepository(Tag) private readonly tagRepository: Repository<Tag>,
     private readonly uploadService: UploadService,
+    @InjectRepository(SiteConfig)
+    private readonly siteConfigRepository: Repository<SiteConfig>,
   ) {}
 
   @Get('list')
@@ -281,6 +292,12 @@ export class AdminArticleController {
         }
       }
 
+      // 3. 如果没有提供封面，使用站点配置中的默认封面
+      if (!createArticleDto.cover || createArticleDto.cover.trim() === '') {
+        const [siteConfig] = await this.siteConfigRepository.find();
+        createArticleDto.cover = siteConfig.articleCover;
+      }
+
       // 将原始数据转换为实体对象，只包含实际存在于数据库中的字段
       const article: Partial<Article> = {
         articleTitle: createArticleDto.title,
@@ -337,6 +354,12 @@ export class AdminArticleController {
     console.log('标签名列表:', updateArticleDto.tagNameList);
 
     try {
+      // 如果没有提供封面，使用站点配置中的默认封面
+      if (!updateArticleDto.cover || updateArticleDto.cover.trim() === '') {
+        const [siteConfig] = await this.siteConfigRepository.find();
+        updateArticleDto.cover = siteConfig.articleCover;
+      }
+
       // 准备用于更新的文章数据
       const updateData: Partial<Article> = {
         id: updateArticleDto.id,

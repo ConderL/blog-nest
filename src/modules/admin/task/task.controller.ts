@@ -13,7 +13,6 @@ import {
 import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TaskService } from './task.service';
-import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Result } from '../../../common/utils/result';
 import { LogService } from '../../log/log.service';
@@ -25,7 +24,6 @@ import { TaskRunDto } from './dto/task-run.dto';
 
 @ApiTags('任务管理')
 @Controller('admin/task')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 @ApiBearerAuth()
 export class TaskController {

@@ -8,7 +8,6 @@ import { Result } from '../../../common/utils/result';
 
 @ApiTags('在线用户管理')
 @Controller('admin/online')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 @ApiBearerAuth()
 export class OnlineUserController {

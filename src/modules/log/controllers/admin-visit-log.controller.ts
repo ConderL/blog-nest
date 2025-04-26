@@ -14,7 +14,6 @@ import { Roles } from '../../../common/decorators/roles.decorator';
  */
 @ApiTags('访问日志管理')
 @Controller('admin/visit')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 @ApiBearerAuth()
 export class AdminVisitLogController {

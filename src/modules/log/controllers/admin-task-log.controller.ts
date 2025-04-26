@@ -16,7 +16,6 @@ import { TaskLogPageDto, TaskLogIdListDto } from '../dto/task-log.dto';
  */
 @ApiTags('任务日志管理')
 @Controller('admin/taskLog')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 @ApiBearerAuth()
 export class AdminTaskLogController {

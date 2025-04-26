@@ -1,7 +1,5 @@
-import { Controller, Get, Post, Body, Put, Param, Delete, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Put, Param, Delete, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { MenuService } from '../services/menu.service';
 import { Menu } from '../entities/menu.entity';
@@ -15,7 +13,6 @@ import { Like } from 'typeorm';
  */
 @ApiTags('菜单管理')
 @Controller('admin/menu')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 @ApiBearerAuth()
 export class AdminMenuController {

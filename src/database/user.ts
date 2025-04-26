@@ -3,6 +3,7 @@ import { Role } from '../modules/user/entities/role.entity';
 import { UserRole } from '../modules/user/entities/user-role.entity';
 import { Repository } from 'typeorm';
 import { Logger } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 
 /**
  * 初始化用户数据
@@ -35,9 +36,27 @@ export async function initUsers(
         avatar: '',
       });
 
+      // 创建普通用户
+      const normalUser = userRepository.create({
+        id: 2,
+        username: 'user',
+        nickname: '普通用户',
+        // 使用bcrypt加密123456
+        password: await bcrypt.hash('123456', 10),
+        email: 'user@example.com',
+        loginType: 1, // 邮箱登录
+        isDisable: 0, // 启用
+        createTime: new Date(),
+        avatar: '',
+      });
+
       // 保存管理员用户
       const savedAdmin = await userRepository.save(adminUser);
       logger.log(`管理员用户创建成功，ID: ${savedAdmin.id}`);
+
+      // 保存普通用户
+      const savedNormalUser = await userRepository.save(normalUser);
+      logger.log(`普通用户创建成功，ID: ${savedNormalUser.id}`);
     }
 
     // 检查用户角色关联表是否为空
@@ -57,6 +76,13 @@ export async function initUsers(
         [54, 1, 1],
       );
       logger.log('成功创建管理员用户角色关联记录(ID=54, userId=1, roleId=1)');
+
+      // 插入普通用户角色关联 (用户ID=2, 角色ID=2)
+      await userRoleRepository.query(
+        `INSERT INTO t_user_role (id, user_id, role_id) VALUES (?, ?, ?)`,
+        [55, 2, 2],
+      );
+      logger.log('成功创建普通用户角色关联记录(ID=55, userId=2, roleId=2)');
 
       // 插入ID为50的用户角色关联 (用户ID=3, 角色ID=3)
       await userRoleRepository.query(

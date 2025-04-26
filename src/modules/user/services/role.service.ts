@@ -63,11 +63,6 @@ export class RoleService {
     // 更新角色
     await this.roleRepository.update(id, role);
 
-    // 如果有菜单权限，更新菜单关联
-    if (role['menuIds'] && Array.isArray(role['menuIds'])) {
-      await this.assignRoleMenus(id, role['menuIds']);
-    }
-
     return this.findById(id);
   }
 

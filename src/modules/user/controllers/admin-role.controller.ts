@@ -1,7 +1,5 @@
-import { Controller, Get, Post, Body, Put, Param, Delete, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Put, Param, Delete, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { RoleService } from '../services/role.service';
 import { Role } from '../entities/role.entity';
@@ -15,7 +13,6 @@ import { Like } from 'typeorm';
  */
 @ApiTags('角色管理')
 @Controller('admin/role')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 @ApiBearerAuth()
 export class AdminRoleController {
@@ -84,11 +81,28 @@ export class AdminRoleController {
   @ApiOperation({ summary: '修改角色' })
   @OperationLog(OperationType.UPDATE)
   @Put('update')
-  async updateRole(@Body() role: Partial<Role>): Promise<Result<null>> {
+  async updateRole(@Body() roleData: any): Promise<Result<null>> {
     try {
-      // 设置更新时间
-      role.updateTime = new Date();
+      // 从请求数据中提取角色基本信息和菜单ID列表
+      const { id, roleName, roleDesc, isDisable, menuIdList, ...otherProps } = roleData;
+
+      // 角色基本信息
+      const role: Partial<Role> = {
+        id,
+        roleName,
+        roleDesc,
+        isDisable,
+        updateTime: new Date(),
+      };
+
+      // 更新角色基本信息
       await this.roleService.update(role.id, role);
+
+      // 如果提供了菜单ID列表，单独更新角色菜单关联
+      if (menuIdList && Array.isArray(menuIdList)) {
+        await this.roleService.assignRoleMenus(role.id, menuIdList);
+      }
+
       return Result.ok(null, '修改成功');
     } catch (error) {
       return Result.fail(error.message);

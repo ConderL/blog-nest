@@ -11,7 +11,6 @@ import { RequiredPermission } from '../../common/decorators/required-permission.
  */
 @ApiTags('在线用户管理')
 @Controller('monitor/online')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class OnlineController {
   constructor(private readonly onlineService: OnlineService) {}
