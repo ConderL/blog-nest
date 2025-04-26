@@ -10,7 +10,6 @@ import { UserModule } from './modules/user/user.module';
 import { BlogModule } from './modules/blog/blog.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { OauthModule } from './modules/oauth/oauth.module';
-import { SearchModule } from './modules/search/search.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { EmailModule } from './modules/email/email.module';
 import { CacheModule } from '@nestjs/cache-manager';
@@ -59,7 +58,6 @@ import { AdminModule } from './modules/admin/admin.modules';
     EmailModule,
     UploadModule,
     OauthModule,
-    SearchModule,
     QueueModule,
     AuthModule,
     UserModule,

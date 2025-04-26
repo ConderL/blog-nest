@@ -157,7 +157,7 @@ export class BaiduTextCensorService {
 
       // 获取访问令牌
       const accessToken = await this.getAccessToken();
-      console.log(accessToken, 'accessToken');
+
       // 调用百度文本审核API
       const response = await axios.post(
         `https://aip.baidubce.com/rest/2.0/solution/v1/text_censor/v2/user_defined?access_token=${accessToken}`,
@@ -172,23 +172,6 @@ export class BaiduTextCensorService {
       // 解析审核结果
       const result = response.data;
       this.logger.debug(`百度文本审核结果: ${JSON.stringify(result)}`);
-
-      // 响应格式参考：
-      // {
-      //   "log_id": 123456789,
-      //   "conclusion": "不合规",
-      //   "conclusionType": 2,  // 1:合规, 2:不合规, 3:疑似, 4:审核失败
-      //   "data": [
-      //     {
-      //       "type": 11,
-      //       "subType": 0,
-      //       "conclusion": "不合规",
-      //       "conclusionType": 2,
-      //       "msg": "存在政治敏感不合规",
-      //       "hits": [{"datasetName": "百度默认黑词库", "words": ["敏感词1", "敏感词2"]}]
-      //     }
-      //   ]
-      // }
 
       // 如果审核成功
       if (result.conclusion) {
@@ -225,6 +208,8 @@ export class BaiduTextCensorService {
             const regex = new RegExp(this.escapeRegExp(word), 'g');
             filteredText = filteredText.replace(regex, replacement);
           });
+
+          this.logger.warn(`百度审核发现敏感内容: "${text}" -> "${filteredText}"`);
         }
 
         return {

@@ -141,17 +141,13 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       // 使用百度文本审核服务替代本地敏感词过滤
       const censorResult = await this.baiduTextCensorService.textCensor(data.content);
 
-      if (!censorResult.isSafe) {
-        this.logger.warn(`消息审核未通过: ${censorResult.reasons?.join(', ') || '含敏感内容'}`);
-        return {
-          success: false,
-          message: '消息包含敏感内容，已被过滤',
-          filteredContent: censorResult.filteredText,
-        };
-      }
+      this.logger.log('百度文本审核结果:', censorResult);
 
-      // 如果有过滤后的文本（但仍然安全），使用过滤后的文本
+      // 使用过滤后的文本（无论是否安全）
       const messageContent = censorResult.filteredText || data.content;
+
+      // 检查消息是否包含敏感词
+      const hasSensitiveContent = !censorResult.isSafe;
 
       // 获取客户端IP
       const clientIp = data.ipAddress || client.handshake.address;
@@ -188,6 +184,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         success: true,
         message: messageObj,
         isSelf: true, // 标记为自己发送的消息
+        // 如果有敏感内容，添加提示信息
+        notice: hasSensitiveContent ? '您的消息包含敏感内容，已自动过滤' : undefined,
       };
     } catch (error) {
       this.logger.error(`处理聊天消息时发生错误: ${error.message}`, error.stack);

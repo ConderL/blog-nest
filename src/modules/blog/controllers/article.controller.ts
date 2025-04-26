@@ -39,6 +39,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { CommentService } from '../services/comment.service';
 import { Response } from 'express';
+import { ArticleSearch } from '../dtos/article-search.dto';
 
 // 前台文章控制器
 @ApiTags('文章')
@@ -108,6 +109,56 @@ export class ArticleController {
       console.error('获取推荐文章失败:', error);
       return ResultDto.error('获取推荐文章失败');
     }
+  }
+
+  @ApiOperation({ summary: '搜索文章' })
+  @Get('search')
+  @Public()
+  async searchArticles(@Query('keyword') keyword: string): Promise<ResultDto<ArticleSearch[]>> {
+    try {
+      if (!keyword) {
+        return ResultDto.success([]);
+      }
+
+      // 使用文章服务查找符合关键词的文章
+      const { recordList } = await this.articleService.findAll(
+        1, // 页码
+        20, // 限制结果数量
+        keyword, // 搜索关键词
+        undefined, // 分类ID，不限制
+        undefined, // 标签ID，不限制
+        1, // 只搜索已发布的文章
+      );
+
+      // 转换为前端需要的格式 (id, articleTitle, articleContent)
+      const result = recordList.map((article) => ({
+        id: article.id,
+        articleTitle: article.articleTitle,
+        // 截取部分内容用于预览，移除HTML标签
+        articleContent: this.truncateHtml(article.articleContent, 200),
+      }));
+
+      return ResultDto.success(result);
+    } catch (error) {
+      console.error('搜索文章失败:', error);
+      return ResultDto.error('搜索文章失败');
+    }
+  }
+
+  /**
+   * 截取HTML内容并移除HTML标签
+   * @param html HTML内容
+   * @param length 截取长度
+   * @returns 处理后的文本
+   */
+  private truncateHtml(html: string, length: number): string {
+    if (!html) return '';
+
+    // 移除HTML标签
+    const text = html.replace(/<\/?[^>]+(>|$)/g, '');
+
+    // 截取指定长度
+    return text.length > length ? text.substring(0, length) + '...' : text;
   }
 
   @ApiOperation({ summary: '查询文章详情' })

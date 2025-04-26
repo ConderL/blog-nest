@@ -47,11 +47,21 @@ export class LocalTextFilterService {
       }
     });
 
+    const hasSensitiveContent = foundWords.length > 0;
+
+    if (hasSensitiveContent) {
+      this.logger.warn(
+        `检测到敏感内容: "${text}" -> "${filteredText}", 敏感词: ${foundWords.join(', ')}`,
+      );
+    }
+
     return {
-      isSafe: foundWords.length === 0,
+      // 即使含有敏感词，也不阻止消息发送，仅标记状态
+      isSafe: !hasSensitiveContent,
+      // 返回过滤后的文本
       filteredText,
-      reasons: foundWords.length > 0 ? ['存在敏感内容'] : undefined,
-      originalText: foundWords.length > 0 ? text : undefined,
+      reasons: hasSensitiveContent ? ['存在敏感内容，已自动过滤'] : undefined,
+      originalText: hasSensitiveContent ? text : undefined,
     };
   }
 
