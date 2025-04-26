@@ -65,8 +65,9 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.ipSocketMap.set(ip, client);
     this.onlineCount++;
 
-    // 生成随机昵称
-    const randomNickname = NicknameGenerator.getNickname(ip);
+    // 检查客户端数据中是否有用户信息
+    const userId = client.handshake?.query?.userId as string;
+    const userAvatar = client.handshake?.query?.avatar as string;
 
     // 尝试获取IP归属地
     let ipSource = '未知';
@@ -76,17 +77,33 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       this.logger.error(`获取IP地理位置失败: ${error.message}`);
     }
 
-    // 为当前socket设置数据
-    client.data.ip = ip;
-    client.data.nickname = randomNickname;
-    client.data.ipSource = ipSource;
-    client.data.connectTime = new Date();
+    // 生成随机昵称作为备选
+    const randomNickname = NicknameGenerator.getNickname(ip);
 
-    // 发送IP和随机昵称给客户端
+    // 确定最终使用的昵称，已登录用户优先使用查询参数中的昵称
+    const nickname = (client.handshake?.query?.nickname as string) || randomNickname;
+    this.logger.log(`为客户端 ${client.id}, IP: ${ip} 分配昵称: ${nickname}`);
+
+    // 默认头像
+    const defaultAvatar = 'http://img.conder.top/config/default_avatar.jpg';
+    const avatar = userAvatar || defaultAvatar;
+
+    // 为当前socket设置数据，保证数据一致性
+    client.data = {
+      ...client.data,
+      ip: ip,
+      nickname: nickname,
+      ipSource: ipSource,
+      connectTime: new Date(),
+      userId: userId ? parseInt(userId) : undefined,
+      avatar: avatar,
+    };
+
+    // 发送IP和昵称给客户端
     client.emit('init', {
       ip,
-      nickname: randomNickname,
-      avatarUrl: 'http://img.conder.top/config/default_avatar.jpg',
+      nickname: nickname,
+      avatarUrl: avatar,
     });
 
     // 发送欢迎消息
@@ -138,6 +155,18 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
 
     try {
+      // 检查昵称是否与Socket中存储的一致，如果不一致则更新Socket中的昵称
+      if (data.nickname && client.data?.nickname !== data.nickname) {
+        this.logger.log(`更新用户昵称: ${client.data?.nickname} -> ${data.nickname}`);
+        client.data.nickname = data.nickname;
+      }
+
+      // 更新用户头像
+      if (data.avatar && client.data?.avatar !== data.avatar) {
+        this.logger.log(`更新用户头像: ${client.data?.avatar} -> ${data.avatar}`);
+        client.data.avatar = data.avatar;
+      }
+
       // 使用百度文本审核服务替代本地敏感词过滤
       const censorResult = await this.baiduTextCensorService.textCensor(data.content);
 
@@ -251,9 +280,19 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
    * 处理心跳请求
    */
   @SubscribeMessage('heartbeat')
-  handleHeartbeat(/* @ConnectedSocket() client: Socket */) {
-    // 简单地返回一个响应，表示服务器仍然活跃
-    return { timestamp: Date.now() };
+  handleHeartbeat(@ConnectedSocket() client: Socket) {
+    this.logger.debug(`收到来自客户端 ${client.id} 的心跳请求`);
+
+    // 更新客户端最后活动时间
+    if (client.data) {
+      client.data.lastActiveTime = new Date();
+    }
+
+    // 返回一个简单的响应，避免复杂对象可能导致的错误
+    return {
+      timestamp: Date.now(),
+      clientId: client.id,
+    };
   }
 
   /**

@@ -292,18 +292,17 @@ export class AdminArticleController {
         }
       }
 
-      // 3. 如果没有提供封面，使用站点配置中的默认封面
-      if (!createArticleDto.cover || createArticleDto.cover.trim() === '') {
-        const [siteConfig] = await this.siteConfigRepository.find();
-        createArticleDto.cover = siteConfig.articleCover;
-      }
+      const [siteConfig] = await this.siteConfigRepository.find();
+
+      console.log(siteConfig, 'siteConfig.articleCover');
+      console.log(createArticleDto.cover, 'createArticleDto.cover');
 
       // 将原始数据转换为实体对象，只包含实际存在于数据库中的字段
       const article: Partial<Article> = {
         articleTitle: createArticleDto.title,
         articleContent: createArticleDto.content,
         articleDesc: createArticleDto.description || '',
-        articleCover: createArticleDto.cover || '',
+        articleCover: createArticleDto.cover || siteConfig.articleCover,
         categoryId: categoryId,
         articleType: articleData.articleType,
         isTop: createArticleDto.isTop ? 1 : 0,

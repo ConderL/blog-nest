@@ -9,6 +9,7 @@ import {
   Get,
   Query,
   Req,
+  Put,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -20,6 +21,7 @@ import { ResultDto } from '../../common/dtos/result.dto';
 import { Logger } from '@nestjs/common';
 import { EmailLoginDto } from './dto/email-login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @ApiTags('认证')
 @Controller('auth')
@@ -81,6 +83,14 @@ export class AuthController {
   async register(@Body() registerDto: RegisterDto) {
     this.logger.log(`收到注册请求: ${JSON.stringify(registerDto)}`);
     return this.authService.register(registerDto);
+  }
+
+  @Put('user/password')
+  @Public()
+  @ApiOperation({ summary: '修改密码' })
+  @HttpCode(HttpStatus.OK)
+  async changePassword(@Body() changePasswordDto: ChangePasswordDto): Promise<ResultDto<any>> {
+    return this.authService.changePassword(changePasswordDto);
   }
 }
 

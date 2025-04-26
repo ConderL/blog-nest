@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, ExtractJwt } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -25,36 +25,34 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     this.logger.log(`Validating JWT payload: ${JSON.stringify(payload)}`);
     try {
-      const { sub: id } = payload;
-      // 首先尝试通过ID查找用户
-      let user = await this.userService.findById(id);
+      // 从payload中获取用户ID，优先使用id，如果没有则使用sub
+      const userId = payload.id || payload.sub;
 
-      // 如果通过ID找不到用户，则尝试通过用户名查找
-      if (!user && payload.username) {
-        this.logger.warn(
-          `User with ID ${id} not found, trying to find by username ${payload.username}`,
-        );
-        user = await this.userService.findByUsername(payload.username);
+      if (!userId) {
+        this.logger.error('无效的JWT载荷: 缺少用户ID');
+        throw new UnauthorizedException('无效的认证令牌');
       }
 
+      // 通过ID查找用户
+      const user = await this.userService.findById(userId);
+
+      // 如果找不到用户，抛出异常而不是返回默认对象
       if (!user) {
-        this.logger.error(`User with ID ${id} and username ${payload.username} not found`);
-        // 为了防止验证失败，创建一个最小的用户对象
-        return {
-          id: id,
-          username: payload.username || 'unknown',
-        };
+        this.logger.error(`用户不存在，ID: ${userId}`);
+        throw new UnauthorizedException('用户不存在或已被删除');
       }
 
-      this.logger.log(`User validated: ${user.username}`);
-      return user;
+      this.logger.log(`用户验证成功: ${user.username} (ID: ${user.id})`);
+
+      // 确保返回的用户对象包含正确的ID
+      return {
+        id: user.id,
+        username: user.username,
+        nickname: user.nickname,
+      };
     } catch (error) {
       this.logger.error(`JWT验证出错: ${error.message}`);
-      // 返回一个最小的用户对象以避免验证失败
-      return {
-        id: payload.sub,
-        username: payload.username || 'unknown',
-      };
+      throw new UnauthorizedException('认证失败: ' + error.message);
     }
   }
 }

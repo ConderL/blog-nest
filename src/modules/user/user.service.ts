@@ -11,6 +11,7 @@ import { UploadService } from '../upload/services/upload/upload.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
+import { SiteConfig } from '../blog/entities/site-config.entity';
 
 @Injectable()
 export class UserService {
@@ -27,6 +28,8 @@ export class UserService {
     private readonly menuRepository: Repository<Menu>,
     @InjectRepository(RoleMenu)
     private readonly roleMenuRepository: Repository<RoleMenu>,
+    @InjectRepository(SiteConfig)
+    private readonly siteConfigRepository: Repository<SiteConfig>,
     private readonly uploadService: UploadService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
@@ -102,34 +105,42 @@ export class UserService {
     nickname: string;
     loginType: number;
   }): Promise<User> {
-    // 检查用户名是否存在
-    const existingUser = await this.userRepository.findOne({
-      where: [{ username: userData.username }, { email: userData.email }],
-    });
+    try {
+      // 检查用户名是否存在
+      const existingUser = await this.userRepository.findOne({
+        where: [{ username: userData.username }, { email: userData.email }],
+      });
 
-    if (existingUser) {
-      throw new Error('用户名或邮箱已存在');
+      if (existingUser) {
+        throw new Error('用户名或邮箱已存在');
+      }
+
+      // 直接从数据库获取站点配置
+      const [siteConfig] = await this.siteConfigRepository.find();
+
+      // 创建新用户
+      const newUser = this.userRepository.create({
+        username: userData.username,
+        email: userData.email,
+        password: userData.password, // 已经在AuthService中进行了加密处理
+        nickname: userData.nickname,
+        loginType: userData.loginType,
+        isDisable: 0, // 默认启用
+        createTime: new Date(), // 设置创建时间为当前时间
+        avatar: siteConfig?.touristAvatar || '', // 设置默认头像
+      });
+
+      // 保存用户
+      const savedUser = await this.userRepository.save(newUser);
+
+      // 为新用户添加角色
+      await this.addUserRole(savedUser.id);
+
+      return this.findById(savedUser.id);
+    } catch (error) {
+      this.logger.error(`创建用户失败: ${error.message}`);
+      throw error;
     }
-
-    // 创建新用户
-    const newUser = this.userRepository.create({
-      username: userData.username,
-      email: userData.email,
-      password: userData.password, // 已经在AuthService中进行了加密处理
-      nickname: userData.nickname,
-      loginType: userData.loginType,
-      isDisable: 0, // 默认启用
-      createTime: new Date(), // 设置创建时间为当前时间
-      avatar: '', // 设置默认头像为空字符串
-    });
-
-    // 保存用户
-    const savedUser = await this.userRepository.save(newUser);
-
-    // 为新用户添加角色
-    await this.addUserRole(savedUser.id);
-
-    return this.findById(savedUser.id);
   }
 
   /**
@@ -739,6 +750,28 @@ export class UserService {
     } catch (error) {
       console.error('创建第三方登录用户失败:', error);
       throw new Error('创建用户失败: ' + error.message);
+    }
+  }
+
+  /**
+   * 更新用户密码
+   * @param userId 用户ID
+   * @param hashedPassword 已加密的密码
+   */
+  async updateUserPassword(userId: number, hashedPassword: string): Promise<void> {
+    try {
+      // 查询用户
+      const user = await this.findById(userId);
+      if (!user) {
+        throw new Error('用户不存在');
+      }
+
+      // 更新用户密码
+      await this.userRepository.update(userId, { password: hashedPassword });
+      this.logger.log(`用户 ${userId} 密码更新成功`);
+    } catch (error) {
+      this.logger.error(`更新用户密码失败: ${error.message}`);
+      throw error;
     }
   }
 

@@ -16,10 +16,12 @@ import { MenuController } from './controllers/menu.controller';
 import { AdminMenuController } from './controllers/admin-menu.controller';
 import { AdminRoleController } from './controllers/admin-role.controller';
 import { UploadModule } from '../upload/upload.module';
+import { SiteConfigService } from '../blog/services/site-config.service';
+import { SiteConfig } from '../blog/entities/site-config.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Role, UserRole, Menu, RoleMenu]),
+    TypeOrmModule.forFeature([User, Role, UserRole, Menu, RoleMenu, SiteConfig]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -38,7 +40,7 @@ import { UploadModule } from '../upload/upload.module';
     AdminMenuController,
     AdminRoleController,
   ],
-  providers: [UserService, RoleService, MenuService],
-  exports: [UserService, RoleService, MenuService],
+  providers: [UserService, RoleService, MenuService, SiteConfigService],
+  exports: [UserService, RoleService, MenuService, SiteConfigService],
 })
 export class UserModule {}

@@ -22,7 +22,21 @@ export class OnlineUserService {
       const onlineUsers = await Promise.all(
         clients.map(async (client) => {
           const ip = client.data?.ip || client.handshake?.address || '未知IP';
-          const nickname = client.data?.nickname || '匿名用户';
+
+          // 获取用户昵称 - 优先使用用户ID关联的昵称
+          let nickname = '匿名用户';
+          const userId = client.data?.userId;
+          const clientNickname = client.data?.nickname;
+
+          // 如果client.data中有昵称，使用它
+          if (clientNickname) {
+            nickname = clientNickname;
+            this.logger.log(`使用客户端存储的昵称: ${nickname}, userId: ${userId || '未登录'}`);
+          }
+
+          // 获取用户头像
+          const defaultAvatar = 'http://img.conder.top/config/default_avatar.jpg';
+          const avatar = client.data?.avatar || defaultAvatar;
 
           // 获取IP归属地
           let ipSource = '未知位置';
@@ -45,10 +59,12 @@ export class OnlineUserService {
             ip,
             ipSource,
             nickname,
+            avatar,
             browser,
             os,
             connectTime,
             loginTime: connectTime,
+            userId: userId,
           };
         }),
       );

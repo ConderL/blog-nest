@@ -31,7 +31,7 @@ export async function initSiteConfig(siteConfigRepository: Repository<SiteConfig
       recordNumber: '豫ICP备2024068028号-1',
       authorAvatar: 'http://img.conder.top/config/avatar.jpg',
       siteAuthor: '@ConderL',
-      articleCover: '',
+      articleCover: 'http://img.conder.top/config/default_cover.png',
       aboutMe: '\uD83C\uDF40个人简介\n\n全栈开发工程师\n\n喜欢捣鼓一些新奇的东西',
       github: 'https://github.com/ConderL',
       bilibili: 'https://space.bilibili.com/180248324',

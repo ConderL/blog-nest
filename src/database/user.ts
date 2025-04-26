@@ -33,7 +33,7 @@ export async function initUsers(
         loginType: 1, // 邮箱登录
         isDisable: 0, // 启用
         createTime: new Date(),
-        avatar: '',
+        avatar: 'http://img.conder.top/config/avatar.jpg',
       });
 
       // 创建普通用户
@@ -47,7 +47,7 @@ export async function initUsers(
         loginType: 1, // 邮箱登录
         isDisable: 0, // 启用
         createTime: new Date(),
-        avatar: '',
+        avatar: 'http://img.conder.top/config/default_avatar.jpg',
       });
 
       // 保存管理员用户

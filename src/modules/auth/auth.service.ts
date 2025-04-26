@@ -25,6 +25,8 @@ import { OnlineUserDto } from '../online/dto/online-user.dto';
 import { Request } from 'express';
 import { IPUtil } from '../../common/utils/ip.util';
 import { UAParser } from 'ua-parser-js';
+import { SiteConfigService } from '../blog/services/site-config.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
 /**
  * 解密密码
  */
@@ -113,6 +115,7 @@ export class AuthService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly queueService: QueueService,
     private readonly onlineService: OnlineService,
+    private readonly siteConfigService: SiteConfigService,
   ) {}
 
   /**
@@ -639,7 +642,7 @@ export class AuthService {
       // 提取邮箱用户名作为昵称
       const nickname = emailToUse.split('@')[0];
 
-      // 创建用户
+      // 创建用户 - 现在会自动从站点配置中获取默认头像
       const user = await this.userService.createUser({
         username: emailToUse, // 使用邮箱作为用户名
         email: emailToUse,
@@ -648,7 +651,7 @@ export class AuthService {
         loginType: 1, // 邮箱登录
       });
 
-      // 分配角色 - 普通用户角色ID为3
+      // 分配角色 - 普通用户角色ID为2
       try {
         await this.userService.assignUserRoles(user.id, [2]);
       } catch (e) {
@@ -667,7 +670,7 @@ export class AuthService {
         id: user.id,
         username: user.username,
         nickname: user.nickname || user.username,
-        avatar: user.avatar || '',
+        avatar: user.avatar, // 直接使用用户头像，无需替换
         email: user.email,
         roleList: roleList,
         token: token,
@@ -677,6 +680,43 @@ export class AuthService {
       return ResultDto.success(userInfo, '注册成功');
     } catch (error) {
       this.logger.error(`用户注册失败: ${error.message}`);
+      return ResultDto.fail(error.message);
+    }
+  }
+
+  /**
+   * 修改密码
+   * @param changePasswordDto 修改密码DTO
+   */
+  async changePassword(changePasswordDto: ChangePasswordDto): Promise<ResultDto<any>> {
+    const { username, password, code, type } = changePasswordDto;
+    this.logger.log(`修改密码请求: ${username}`);
+
+    try {
+      // 校验验证码
+      const isCodeValid = await this.validateEmailCode(username, code, type || 'blog');
+      if (!isCodeValid) {
+        this.logger.warn(`验证码错误: ${username}, ${code}`);
+        throw new BadRequestException('验证码错误或已过期');
+      }
+
+      // 查找用户
+      const user = await this.userService.findByEmail(username);
+      if (!user) {
+        this.logger.warn(`用户不存在: ${username}`);
+        throw new BadRequestException('用户不存在');
+      }
+
+      // 加密密码
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // 更新密码
+      await this.userService.updateUserPassword(user.id, hashedPassword);
+
+      this.logger.log(`密码修改成功: ${username}`);
+      return ResultDto.success(null, '密码修改成功');
+    } catch (error) {
+      this.logger.error(`密码修改失败: ${error.message}`);
       return ResultDto.fail(error.message);
     }
   }

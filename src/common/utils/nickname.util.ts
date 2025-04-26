@@ -58,7 +58,7 @@ export class NicknameGenerator {
     '河马',
   ];
 
-  // IP映射表，用于存储IP与昵称的关系
+  // IP映射表，用于存储IP与昵称的关系，确保使用静态变量保持状态
   private static readonly IP_NICKNAME_MAP = new Map<string, string>();
 
   /**
@@ -67,13 +67,21 @@ export class NicknameGenerator {
    * @returns 随机生成的昵称
    */
   public static getNickname(ip: string): string {
+    // 确保IP不为空
+    if (!ip || ip.trim() === '') {
+      ip = '127.0.0.1'; // 使用本地IP作为默认值
+    }
+
     // 检查是否已经为这个IP生成过昵称
     if (this.IP_NICKNAME_MAP.has(ip)) {
-      return this.IP_NICKNAME_MAP.get(ip);
+      const nickname = this.IP_NICKNAME_MAP.get(ip);
+      console.log(`使用已缓存的昵称: ${ip} -> ${nickname}`);
+      return nickname;
     }
 
     // 生成新昵称
     const nickname = this.generateNickname();
+    console.log(`生成新昵称: ${ip} -> ${nickname}`);
 
     // 存储IP与昵称的映射关系
     this.IP_NICKNAME_MAP.set(ip, nickname);
@@ -99,6 +107,7 @@ export class NicknameGenerator {
    */
   public static clearNickname(ip: string): void {
     this.IP_NICKNAME_MAP.delete(ip);
+    console.log(`已清除IP昵称缓存: ${ip}`);
   }
 
   /**
@@ -106,5 +115,12 @@ export class NicknameGenerator {
    */
   public static getCacheSize(): number {
     return this.IP_NICKNAME_MAP.size;
+  }
+
+  /**
+   * 获取所有已缓存的IP-昵称映射
+   */
+  public static getAllNicknames(): Map<string, string> {
+    return new Map(this.IP_NICKNAME_MAP);
   }
 }

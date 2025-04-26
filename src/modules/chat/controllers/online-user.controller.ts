@@ -1,8 +1,6 @@
-import { Controller, Get, Post, Body, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Body, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { OnlineUserService } from '../services/online-user.service';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Result } from '../../../common/utils/result';
 
@@ -21,6 +19,13 @@ export class OnlineUserController {
     try {
       const onlineUsers = await this.onlineUserService.getOnlineUsers();
       const count = this.onlineUserService.getOnlineCount();
+
+      this.logger.log(`获取到 ${onlineUsers.length} 个在线用户`);
+      onlineUsers.forEach((user, index) => {
+        this.logger.log(
+          `在线用户 ${index + 1}: ID=${user.id}, Nickname=${user.nickname}, IP=${user.ip}`,
+        );
+      });
 
       return Result.ok({
         recordList: onlineUsers,

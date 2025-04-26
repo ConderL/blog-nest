@@ -11,6 +11,7 @@ import { QueueModule } from '../queue/queue.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { redisStore } from 'cache-manager-redis-yet';
 import { OnlineModule } from '../online/online.module';
+import { BlogModule } from '../blog/blog.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { OnlineModule } from '../online/online.module';
     ConfigModule,
     QueueModule,
     OnlineModule,
+    BlogModule,
     CacheModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
