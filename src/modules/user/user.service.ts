@@ -1125,4 +1125,280 @@ export class UserService {
 
     return 0;
   }
+
+  /**
+   * 绑定邮箱
+   * @param userId 用户ID
+   * @param email 邮箱
+   * @returns 绑定结果
+   */
+  async bindEmail(userId: number, email: string): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`用户 ${userId} 尝试绑定邮箱 ${email}`);
+
+    try {
+      // 查找当前用户
+      const currentUser = await this.userRepository.findOne({
+        where: { id: userId },
+      });
+
+      if (!currentUser) {
+        this.logger.error(`用户不存在: ${userId}`);
+        throw new Error('用户不存在');
+      }
+
+      // 检查邮箱是否已被其他账号使用
+      const existingUser = await this.userRepository.findOne({
+        where: { email },
+      });
+
+      // 如果邮箱未被使用，直接绑定
+      if (!existingUser) {
+        this.logger.log(`邮箱 ${email} 未被使用，直接绑定`);
+        await this.userRepository.update(userId, { email });
+        return { success: true, message: '绑定成功' };
+      }
+
+      // 如果当前用户已经绑定了该邮箱，直接返回成功
+      if (existingUser.id === userId) {
+        return { success: true, message: '邮箱已经绑定到当前账号' };
+      }
+
+      // 如果当前用户是邮箱登录，不允许绑定其他账号已使用的邮箱
+      if (currentUser.loginType === 1) {
+        this.logger.warn(`邮箱登录用户(${userId})尝试绑定已被使用的邮箱(${email})`);
+        return { success: false, message: '该邮箱已被其他账号使用，无法绑定' };
+      }
+
+      // 如果是第三方登录用户，则合并两个账号
+      if (currentUser.loginType !== 1 && existingUser.loginType === 1) {
+        this.logger.log(
+          `第三方登录用户(${userId})尝试绑定邮箱账号(${existingUser.id})，开始合并账号`,
+        );
+
+        // 执行账号合并
+        await this.mergeUsers(existingUser.id, userId);
+
+        return { success: true, message: '绑定成功，已合并相关账号信息' };
+      }
+
+      return { success: false, message: '邮箱绑定失败，该邮箱已被其他账号使用' };
+    } catch (error) {
+      this.logger.error(`绑定邮箱失败: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * 合并用户账号
+   * 将源用户(邮箱登录用户)的某些信息合并到目标用户(第三方登录用户)
+   * @param sourceUserId 源用户ID(邮箱登录用户)
+   * @param targetUserId 目标用户ID(第三方登录用户)
+   */
+  private async mergeUsers(sourceUserId: number, targetUserId: number): Promise<void> {
+    this.logger.log(`开始合并用户账号: 源用户=${sourceUserId}, 目标用户=${targetUserId}`);
+
+    try {
+      // 查询源用户和目标用户
+      const sourceUser = await this.userRepository.findOne({ where: { id: sourceUserId } });
+      const targetUser = await this.userRepository.findOne({ where: { id: targetUserId } });
+
+      if (!sourceUser || !targetUser) {
+        throw new Error('源用户或目标用户不存在');
+      }
+
+      // 使用事务执行合并操作
+      await this.userRepository.manager.transaction(async (manager) => {
+        // 1. 从源用户(邮箱账号)保留的字段：password和email
+        const updatedTargetUser = {
+          email: sourceUser.email,
+          password: sourceUser.password, // 使用邮箱账号的密码
+        };
+
+        // 2. 更新目标用户
+        await manager.update(User, targetUserId, updatedTargetUser);
+
+        // 3. 转移源用户关联的内容到目标用户 - 仅在表存在时执行
+        // 获取数据库中实际存在的表
+        const tables = await this.getExistingTables(manager);
+        this.logger.log(`数据库中存在的相关表: ${tables.join(', ')}`);
+
+        // 检查article_like表是否存在
+        if (tables.includes('t_article_like') || tables.includes('article_like')) {
+          const tableName = tables.includes('t_article_like') ? 't_article_like' : 'article_like';
+          await this.transferUserLikes(
+            manager,
+            sourceUserId,
+            targetUserId,
+            tableName,
+            'article_id',
+          );
+        } else {
+          this.logger.log('文章点赞表不存在，跳过转移');
+        }
+
+        // 检查comment_like表是否存在
+        if (tables.includes('t_comment_like') || tables.includes('comment_like')) {
+          const tableName = tables.includes('t_comment_like') ? 't_comment_like' : 'comment_like';
+          await this.transferUserLikes(
+            manager,
+            sourceUserId,
+            targetUserId,
+            tableName,
+            'comment_id',
+          );
+        } else {
+          this.logger.log('评论点赞表不存在，跳过转移');
+        }
+
+        // 检查talk_like表是否存在
+        if (tables.includes('t_talk_like') || tables.includes('talk_like')) {
+          const tableName = tables.includes('t_talk_like') ? 't_talk_like' : 'talk_like';
+          await this.transferUserLikes(manager, sourceUserId, targetUserId, tableName, 'talk_id');
+        } else {
+          this.logger.log('说说点赞表不存在，跳过转移');
+        }
+
+        // 4. 禁用源用户账号
+        await manager.update(User, sourceUserId, {
+          isDisable: 1,
+          updateTime: new Date(),
+        });
+
+        this.logger.log(`用户账号合并完成: 源用户=${sourceUserId}, 目标用户=${targetUserId}`);
+      });
+    } catch (error) {
+      this.logger.error(`合并用户账号失败: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取数据库中实际存在的表
+   * @param manager 事务管理器
+   * @returns 表名数组
+   */
+  private async getExistingTables(manager: any): Promise<string[]> {
+    try {
+      // 获取当前数据库名
+      const dbResult = await manager.query('SELECT DATABASE() as dbName');
+      const dbName = dbResult[0].dbName;
+
+      // 查询所有表
+      const tables = await manager.query(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = ?`,
+        [dbName],
+      );
+
+      return tables.map((t) => t.table_name);
+    } catch (error) {
+      this.logger.error(`获取数据库表失败: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * 转移用户点赞记录
+   * @param manager 事务管理器
+   * @param sourceUserId 源用户ID
+   * @param targetUserId 目标用户ID
+   * @param tableName 点赞表名称
+   * @param idColumnName 关联ID的列名
+   */
+  private async transferUserLikes(
+    manager: any,
+    sourceUserId: number,
+    targetUserId: number,
+    tableName: string,
+    idColumnName: string,
+  ): Promise<void> {
+    try {
+      // 查询源用户的点赞记录
+      const sourceLikes = await manager.query(`SELECT * FROM ${tableName} WHERE user_id = ?`, [
+        sourceUserId,
+      ]);
+
+      if (sourceLikes.length === 0) {
+        this.logger.log(`源用户没有${tableName}记录，无需转移`);
+        return;
+      }
+
+      // 查询目标用户的点赞记录，用于后续去重
+      const targetLikes = await manager.query(`SELECT * FROM ${tableName} WHERE user_id = ?`, [
+        targetUserId,
+      ]);
+
+      const targetLikeIds = new Set();
+      targetLikes.forEach((like) => targetLikeIds.add(like[idColumnName]));
+
+      // 转移源用户独有的点赞记录
+      let transferCount = 0;
+      for (const like of sourceLikes) {
+        if (!targetLikeIds.has(like[idColumnName])) {
+          await manager.query(`UPDATE ${tableName} SET user_id = ? WHERE id = ?`, [
+            targetUserId,
+            like.id,
+          ]);
+          transferCount++;
+        }
+      }
+
+      this.logger.log(`成功转移${transferCount}条用户点赞记录: 表=${tableName}`);
+    } catch (error) {
+      this.logger.error(`转移用户点赞记录失败: ${error.message}`, error.stack);
+      // 不抛出异常，避免因一个表失败而中断整个合并过程
+    }
+  }
+
+  /**
+   * 验证邮箱验证码 - 用于将邮箱与第三方登录账号绑定
+   * @param userId 用户ID
+   * @param email 邮箱
+   * @param code 验证码
+   */
+  async verifyEmail(userId: number, email: string, code: string): Promise<boolean> {
+    this.logger.log(`验证邮箱: userId=${userId}, email=${email}, code=${code}`);
+
+    try {
+      // 构建Redis中验证码的key
+      const redisKey = `user:bind:email:code:${email}`;
+
+      // 从Redis获取验证码
+      const savedCode = await this.redisService.get(redisKey);
+      this.logger.log(`Redis验证码: ${savedCode}`);
+
+      // 验证码不存在或不匹配
+      if (!savedCode || savedCode !== code) {
+        this.logger.log(`验证码不匹配: 输入=${code}, 保存=${savedCode || '无'}`);
+        return false;
+      }
+
+      // 验证码正确，从Redis删除验证码
+      await this.redisService.del(redisKey);
+
+      // 绑定邮箱到用户账号
+      await this.bindEmailToUser(userId, email);
+
+      return true;
+    } catch (error) {
+      this.logger.error(`验证邮箱失败: ${error.message}`, error.stack);
+      return false;
+    }
+  }
+
+  /**
+   * 绑定邮箱到用户账号
+   * @param userId 用户ID
+   * @param email 邮箱
+   * @returns 是否绑定成功
+   */
+  private async bindEmailToUser(userId: number, email: string): Promise<boolean> {
+    try {
+      // 调用已有的bindEmail方法
+      const result = await this.bindEmail(userId, email);
+      return result.success;
+    } catch (error) {
+      this.logger.error(`绑定邮箱到用户账号失败: ${error.message}`, error.stack);
+      return false;
+    }
+  }
 }

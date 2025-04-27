@@ -4,9 +4,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
 import * as qs from 'qs';
-import { OauthUserDto, OauthResultDto } from '../../dto/oauth-user.dto';
-import { OauthUserEntity } from '../../entities/oauth-user.entity';
-import { UserService } from '../../../user/user.service';
+import { OauthUserDto, OauthResultDto } from '../dto/oauth-user.dto';
+import { OauthUserEntity } from '../entities/oauth-user.entity';
+import { UserService } from '../../user/user.service';
 import { JwtService } from '@nestjs/jwt';
 
 /**
@@ -234,7 +234,41 @@ export class OauthService {
         },
       });
 
-      // 2. 如果不存在，创建新记录
+      // 2. 查找本地用户
+      let localUser;
+      let userId;
+
+      // 如果存在第三方用户记录且有关联的本地用户ID
+      if (oauthUserEntity && oauthUserEntity.userId) {
+        try {
+          localUser = await this.userService.findById(oauthUserEntity.userId);
+          if (localUser) {
+            userId = localUser.id;
+            this.logger.log(`找到关联的本地用户: ${localUser.username}`);
+          } else {
+            this.logger.warn(`关联的本地用户不存在, ID: ${oauthUserEntity.userId}`);
+            // 清除无效关联
+            oauthUserEntity.userId = null;
+          }
+        } catch (error) {
+          this.logger.error(`查询本地用户出错: ${error.message}`);
+        }
+      }
+
+      // 3. 如果未找到本地用户，尝试通过邮箱查找
+      if (!localUser && oauthUser.email) {
+        try {
+          localUser = await this.userService.findByEmail(oauthUser.email);
+          if (localUser) {
+            userId = localUser.id;
+            this.logger.log(`通过邮箱找到本地用户: ${localUser.username}`);
+          }
+        } catch (error) {
+          this.logger.error(`通过邮箱查询本地用户出错: ${error.message}`);
+        }
+      }
+
+      // 4. 如果不存在第三方用户记录，创建新记录
       if (!oauthUserEntity) {
         oauthUserEntity = this.oauthUserRepository.create({
           sourceId: oauthUser.sourceId,
@@ -244,60 +278,175 @@ export class OauthService {
           email: oauthUser.email,
           loginType: oauthUser.loginType,
           accessToken: oauthUser.accessToken,
+          userId: userId, // 如果已找到本地用户，设置关联
         });
         await this.oauthUserRepository.save(oauthUserEntity);
+        this.logger.log(`创建新的第三方用户记录: ${oauthUser.username}`);
       } else {
-        // 3. 如果存在，更新记录
+        // 5. 如果存在，更新记录
         oauthUserEntity.username = oauthUser.username;
         oauthUserEntity.nickname = oauthUser.nickname;
         oauthUserEntity.avatar = oauthUser.avatar;
         oauthUserEntity.email = oauthUser.email;
         oauthUserEntity.accessToken = oauthUser.accessToken;
+
+        // 如果找到了本地用户，但记录中没有关联，则更新关联
+        if (userId && !oauthUserEntity.userId) {
+          oauthUserEntity.userId = userId;
+        }
+
         oauthUserEntity.updateTime = new Date();
         await this.oauthUserRepository.save(oauthUserEntity);
+        this.logger.log(`更新第三方用户记录: ${oauthUser.username}`);
       }
 
-      // 4. 查询对应的系统用户
-      const user = await this.userService.findUserByOauth(oauthUser.sourceId, oauthUser.loginType);
+      // 6. 如果本地用户不存在，创建新用户
+      if (!localUser) {
+        try {
+          localUser = await this.userService.createUserFromOauth({
+            username: oauthUser.username,
+            nickname: oauthUser.nickname,
+            avatar: oauthUser.avatar,
+            email: oauthUser.email || '',
+            loginType: oauthUser.loginType,
+            sourceId: oauthUser.sourceId,
+          });
 
-      // 5. 如果系统用户存在，执行登录
-      if (user) {
-        const token = await this.userService.generateToken(user);
-        return {
-          success: true,
-          userId: user.id,
-          username: user.username,
-          nickname: user.nickname,
-          avatar: user.avatar,
-          token,
-        };
+          userId = localUser.id;
+          this.logger.log(`创建新的本地用户: ${localUser.username}, ID: ${userId}`);
+
+          // 更新第三方用户记录，关联本地用户ID
+          if (!oauthUserEntity.userId) {
+            oauthUserEntity.userId = userId;
+            await this.oauthUserRepository.save(oauthUserEntity);
+            this.logger.log(`更新第三方用户记录，关联本地用户ID: ${userId}`);
+          }
+        } catch (error) {
+          this.logger.error(`创建本地用户失败: ${error.message}`);
+          throw new Error(`创建用户失败: ${error.message}`);
+        }
       }
 
-      // 6. 如果系统用户不存在，创建新用户并登录
-      const newUser = await this.userService.createUserFromOauth({
-        username: oauthUser.username,
-        nickname: oauthUser.nickname,
-        avatar: oauthUser.avatar,
-        email: oauthUser.email,
-        loginType: oauthUser.loginType,
-        sourceId: oauthUser.sourceId,
-      });
+      // 7. 生成JWT令牌
+      const token = await this.userService.generateToken(localUser);
 
-      const token = await this.userService.generateToken(newUser);
+      // 8. 返回登录结果
       return {
         success: true,
-        userId: newUser.id,
-        username: newUser.username,
-        nickname: newUser.nickname,
-        avatar: newUser.avatar,
+        userId: localUser.id,
+        username: localUser.username,
+        nickname: localUser.nickname,
+        avatar: localUser.avatar,
         token,
       };
     } catch (error) {
-      this.logger.error('第三方登录失败', error);
+      this.logger.error('第三方登录或注册失败', error);
       return {
         success: false,
-        message: '第三方登录失败: ' + error.message,
+        message: '登录失败: ' + error.message,
       };
+    }
+  }
+
+  /**
+   * 验证OAuth令牌
+   * @param token JWT令牌
+   * @param loginType 登录类型 (1邮箱 2QQ 3Gitee 4Github)
+   * @returns 用户令牌和基本信息
+   */
+  async verifyOauthToken(token: string, loginType: number): Promise<any> {
+    this.logger.log(`验证OAuth令牌: loginType=${loginType}, token=${token.substring(0, 20)}...`);
+
+    if (!token) {
+      this.logger.error('令牌为空');
+      throw new Error('令牌不能为空');
+    }
+
+    try {
+      // 验证JWT令牌
+      const decoded = this.jwtService.verify(token, {
+        secret: this.configService.get('jwt.secret'),
+      });
+
+      this.logger.log(`令牌解析成功: ${JSON.stringify(decoded)}`);
+
+      // 获取用户ID，兼容不同格式的JWT
+      const userId = decoded.sub || decoded.id;
+
+      if (!userId) {
+        this.logger.warn('令牌中缺少用户ID');
+        throw new Error('无效的令牌格式');
+      }
+
+      // 验证用户存在且状态正常
+      const user = await this.userService.findById(userId);
+
+      if (!user) {
+        this.logger.warn(`用户不存在: id=${userId}`);
+        throw new Error('用户不存在');
+      }
+
+      if (user.isDisable === 1) {
+        this.logger.warn(`用户已被禁用: id=${user.id}`);
+        throw new Error('用户已被禁用');
+      }
+
+      // 检查用户是否有有效的OAuth记录
+      let oauthUser = null;
+      if (loginType !== 1) {
+        // 如果不是邮箱登录，尝试查找OAuth记录
+        oauthUser = await this.oauthUserRepository.findOne({
+          where: {
+            userId: user.id,
+            loginType: loginType,
+          },
+        });
+
+        if (!oauthUser) {
+          // 尝试查询是否有未关联的OAuth记录
+          const oauthUsers = await this.oauthUserRepository.find({
+            where: {
+              loginType: loginType,
+            },
+          });
+
+          this.logger.log(`找到${oauthUsers.length}条未关联的OAuth记录`);
+
+          // 如果有未关联的记录，关联到当前用户
+          if (oauthUsers.length > 0) {
+            oauthUser = oauthUsers[0];
+            oauthUser.userId = user.id;
+            await this.oauthUserRepository.save(oauthUser);
+            this.logger.log(`已关联OAuth记录到用户: userId=${user.id}, oauthId=${oauthUser.id}`);
+          } else {
+            this.logger.warn(`用户没有对应的第三方登录记录: id=${user.id}, loginType=${loginType}`);
+          }
+        }
+      }
+
+      // 重新生成一个新鲜的令牌
+      const payload = {
+        username: user.username,
+        sub: user.id,
+        nickname: user.nickname || user.username,
+      };
+      const newToken = this.jwtService.sign(payload, {
+        secret: this.configService.get('jwt.secret'),
+        expiresIn: this.configService.get('jwt.expiresIn') || '24h',
+      });
+
+      // 返回完整的用户信息和令牌
+      return {
+        token: newToken,
+        id: user.id,
+        username: user.username,
+        nickname: user.nickname || user.username,
+        avatar: user.avatar || '',
+        email: user.email || '',
+      };
+    } catch (error) {
+      this.logger.error(`验证OAuth令牌失败: ${error.message}`);
+      throw new Error(`验证失败: ${error.message}`);
     }
   }
 }

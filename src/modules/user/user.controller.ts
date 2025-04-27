@@ -22,13 +22,24 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { OperationLog } from '../../common/decorators/operation-log.decorator';
 import { OperationType } from '../../common/enums/operation-type.enum';
+import { BindEmailDto } from './dto/bind-email.dto';
+import { Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
+import { Logger } from '@nestjs/common';
+import { RedisService } from '../../redis/redis.service';
 
 @ApiTags('用户管理')
 @Controller('user')
 export class UserController {
+  private readonly logger = new Logger(UserController.name);
+  private readonly EMAIL_CODE_PREFIX = 'email_code:';
+
   constructor(
     private readonly userService: UserService,
     private readonly menuService: MenuService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -291,6 +302,89 @@ export class UserController {
     } catch (error) {
       console.error('分配用户角色失败:', error);
       return ResultDto.fail('分配用户角色失败: ' + error.message);
+    }
+  }
+
+  /**
+   * 绑定邮箱
+   * @param bindEmailDto 绑定邮箱DTO
+   * @param req 请求对象
+   */
+  @Put('email')
+  @ApiOperation({ summary: '绑定邮箱' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @OperationLog(OperationType.UPDATE)
+  async bindEmail(@Body() bindEmailDto: BindEmailDto, @Request() req): Promise<ResultDto<any>> {
+    try {
+      // 从JWT令牌中获取用户ID
+      const userId = req.user.id;
+      this.logger.log(`绑定邮箱请求，用户ID: ${userId}，邮箱: ${bindEmailDto.email}`);
+
+      // 验证邮箱验证码
+      const isCodeValid = await this.validateEmailCode(bindEmailDto.email, bindEmailDto.code);
+      if (!isCodeValid) {
+        this.logger.warn(`验证码错误或已过期: ${bindEmailDto.email}, ${bindEmailDto.code}`);
+        return ResultDto.fail('验证码错误或已过期');
+      }
+
+      // 调用用户服务绑定邮箱
+      const result = await this.userService.bindEmail(userId, bindEmailDto.email);
+
+      if (result.success) {
+        return ResultDto.success(null, result.message);
+      } else {
+        return ResultDto.fail(result.message);
+      }
+    } catch (error) {
+      this.logger.error(`绑定邮箱失败: ${error.message}`, error.stack);
+      return ResultDto.fail(`绑定邮箱失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 校验邮箱验证码
+   * @param email 邮箱
+   * @param code 验证码
+   * @returns 验证结果
+   */
+  private async validateEmailCode(email: string, code: string): Promise<boolean> {
+    this.logger.log(`开始校验邮箱验证码: 邮箱=${email}, 验证码=${code}`);
+
+    try {
+      // 已知的键名格式
+      const knownKeyFormats = [
+        `email_code:blog:${email}`,
+        `email_code:ConderView:${email}`,
+        `email_code:ConderBlog:${email}`,
+      ];
+
+      const redisClient = this.redisService.getClient();
+
+      // 直接尝试已知的键名格式
+      for (const key of knownKeyFormats) {
+        const cachedCode = await redisClient.get(key);
+
+        if (!cachedCode) continue;
+
+        // 处理Redis返回的值可能包含引号的情况
+        let normalizedCachedCode = cachedCode;
+        if (cachedCode.startsWith('"') && cachedCode.endsWith('"')) {
+          normalizedCachedCode = cachedCode.slice(1, -1);
+        }
+
+        // 确保进行字符串比较
+        if (normalizedCachedCode.toString() === code.toString()) {
+          // 验证成功后删除缓存
+          await redisClient.del(key);
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      this.logger.error(`验证码验证失败: ${error.message}`);
+      return false;
     }
   }
 }

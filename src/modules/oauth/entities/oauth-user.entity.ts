@@ -29,6 +29,9 @@ export class OauthUserEntity {
   @Column({ type: 'varchar', length: 255, comment: '访问令牌' })
   accessToken: string;
 
+  @Column({ type: 'int', nullable: true, comment: '关联的系统用户ID' })
+  userId: number;
+
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP', comment: '创建时间' })
   createTime: Date;
 
