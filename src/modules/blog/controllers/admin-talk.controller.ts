@@ -1,5 +1,23 @@
-import { Controller, Get, Post, Delete, Body, Query, Logger, Req, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery, ApiResponse, ApiParam } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Body,
+  Query,
+  Logger,
+  Req,
+  Param,
+  ParseIntPipe,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiParam,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { TalkService } from '../services/talk.service';
 import { Result } from '../../../common/result';
 import { Auth } from '../../../decorators/auth.decorator';
@@ -8,6 +26,7 @@ import { CommentService } from '../services/comment.service';
 import { CommentType } from '../entities/comment.entity';
 import { OperationLog } from '../../../common/decorators/operation-log.decorator';
 import { OperationType } from '../../../common/enums/operation-type.enum';
+import { UserService } from '../../user/user.service';
 
 /**
  * 管理端说说控制器
@@ -228,6 +247,7 @@ export class TalkController {
   constructor(
     private readonly talkService: TalkService,
     private readonly commentService: CommentService,
+    private readonly userService: UserService,
   ) {}
 
   /**
@@ -412,6 +432,54 @@ export class TalkController {
         msg: '获取说说详情失败',
         data: null,
       };
+    }
+  }
+
+  /**
+   * 点赞说说
+   */
+  @Post(':id/like')
+  @ApiOperation({ summary: '点赞说说' })
+  @ApiBearerAuth()
+  @Auth()
+  async likeTalk(@Param('id', ParseIntPipe) id: number, @Req() req: any): Promise<any> {
+    try {
+      const userId = req.user?.id || req.user?.userId || req.user?.sub;
+
+      if (!userId) {
+        return Result.fail('无法获取用户ID，请重新登录');
+      }
+
+      const likeCount = await this.userService.addTalkLike(userId, id);
+
+      return Result.ok({ likeCount }, '点赞成功');
+    } catch (error) {
+      this.logger.error(`点赞说说失败: ${error.message}`);
+      return Result.fail('点赞失败: ' + error.message);
+    }
+  }
+
+  /**
+   * 取消点赞说说
+   */
+  @Delete(':id/like')
+  @ApiOperation({ summary: '取消点赞说说' })
+  @ApiBearerAuth()
+  @Auth()
+  async unlikeTalk(@Param('id', ParseIntPipe) id: number, @Req() req: any): Promise<any> {
+    try {
+      const userId = req.user?.id || req.user?.userId || req.user?.sub;
+
+      if (!userId) {
+        return Result.fail('无法获取用户ID，请重新登录');
+      }
+
+      const likeCount = await this.userService.cancelTalkLike(userId, id);
+
+      return Result.ok({ likeCount }, '取消点赞成功');
+    } catch (error) {
+      this.logger.error(`取消点赞说说失败: ${error.message}`);
+      return Result.fail('取消点赞失败: ' + error.message);
     }
   }
 }

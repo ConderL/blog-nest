@@ -134,7 +134,7 @@ export class UserController {
   async getUserInfo(@Request() req): Promise<ResultDto<any>> {
     try {
       const userId = req.user.id;
-      console.log('获取管理员用户信息，用户ID:', userId);
+      console.log('获取用户信息，用户ID:', userId);
 
       // 获取用户基本信息
       const user = await this.userService.findById(userId);
@@ -151,6 +151,19 @@ export class UserController {
       const permissionList = await this.userService.getUserPermissions(userId);
       console.log('获取到权限数量:', permissionList.length);
 
+      // 获取用户点赞信息
+      const articleLikeSet = await this.userService.getUserArticleLikes(userId);
+      const commentLikeSet = await this.userService.getUserCommentLikes(userId);
+      const talkLikeSet = await this.userService.getUserTalkLikes(userId);
+      console.log(
+        '获取到点赞信息，文章点赞数:',
+        articleLikeSet.length,
+        '评论点赞数:',
+        commentLikeSet.length,
+        '说说点赞数:',
+        talkLikeSet.length,
+      );
+
       // 如果用户没有角色或权限，直接返回空数组，不再添加默认值
       const userInfo = {
         id: user.id,
@@ -158,13 +171,19 @@ export class UserController {
         nickname: user.nickname,
         avatar: user.avatar || '',
         roleList: roleList.map((role) => role.roleLabel || role.id),
+        email: user.email,
+        webSite: user.webSite || '',
+        intro: user.intro || '',
         permissionList,
+        articleLikeSet,
+        commentLikeSet,
+        talkLikeSet,
       };
 
-      console.log('返回管理员用户信息:', JSON.stringify(userInfo).substring(0, 100) + '...');
+      console.log('返回用户信息:', JSON.stringify(userInfo).substring(0, 100) + '...');
       return ResultDto.success(userInfo);
     } catch (error) {
-      console.error('获取管理员用户信息失败:', error);
+      console.error('获取用户信息失败:', error);
       return ResultDto.fail('获取用户信息失败: ' + error.message);
     }
   }
@@ -419,6 +438,19 @@ export class AdminUserController {
       const permissionList = await this.userService.getUserPermissions(userId);
       console.log('获取到权限数量:', permissionList.length);
 
+      // 获取用户点赞信息
+      const articleLikeSet = await this.userService.getUserArticleLikes(userId);
+      const commentLikeSet = await this.userService.getUserCommentLikes(userId);
+      const talkLikeSet = await this.userService.getUserTalkLikes(userId);
+      console.log(
+        '获取到点赞信息，文章点赞数:',
+        articleLikeSet.length,
+        '评论点赞数:',
+        commentLikeSet.length,
+        '说说点赞数:',
+        talkLikeSet.length,
+      );
+
       // 如果用户没有角色或权限，直接返回空数组，不再添加默认值
       const userInfo = {
         id: user.id,
@@ -427,6 +459,9 @@ export class AdminUserController {
         avatar: user.avatar || '',
         roleList: roleList.map((role) => role.roleLabel || role.id),
         permissionList,
+        articleLikeSet,
+        commentLikeSet,
+        talkLikeSet,
       };
 
       console.log('返回管理员用户信息:', JSON.stringify(userInfo).substring(0, 100) + '...');

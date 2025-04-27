@@ -12,6 +12,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import { SiteConfig } from '../blog/entities/site-config.entity';
+import { RedisService } from '../../redis/redis.service';
+import { RedisConstant } from '../../common/constants/redis.constant';
 
 @Injectable()
 export class UserService {
@@ -33,6 +35,7 @@ export class UserService {
     private readonly uploadService: UploadService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -856,5 +859,270 @@ export class UserService {
     } catch (error) {
       this.logger.error('创建默认管理员用户失败:', error.message);
     }
+  }
+
+  /**
+   * 获取用户文章点赞集合
+   * @param userId 用户ID
+   * @returns 文章点赞ID数组
+   */
+  async getUserArticleLikes(userId: number): Promise<number[]> {
+    try {
+      const key = `${RedisConstant.USER_ARTICLE_LIKE}${userId}`;
+      const likes = await this.redisService.smembers(key);
+      return likes.map((id) => parseInt(id));
+    } catch (error) {
+      this.logger.error(`获取用户文章点赞集合失败: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * 获取用户评论点赞集合
+   * @param userId 用户ID
+   * @returns 评论点赞ID数组
+   */
+  async getUserCommentLikes(userId: number): Promise<number[]> {
+    try {
+      const key = `${RedisConstant.USER_COMMENT_LIKE}${userId}`;
+      const likes = await this.redisService.smembers(key);
+      return likes.map((id) => parseInt(id));
+    } catch (error) {
+      this.logger.error(`获取用户评论点赞集合失败: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * 获取用户说说点赞集合
+   * @param userId 用户ID
+   * @returns 说说点赞ID数组
+   */
+  async getUserTalkLikes(userId: number): Promise<number[]> {
+    try {
+      const key = `${RedisConstant.USER_TALK_LIKE}${userId}`;
+      const likes = await this.redisService.smembers(key);
+      return likes.map((id) => parseInt(id));
+    } catch (error) {
+      this.logger.error(`获取用户说说点赞集合失败: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * 添加用户文章点赞
+   * @param userId 用户ID
+   * @param articleId 文章ID
+   * @returns 点赞后的数量
+   */
+  async addArticleLike(userId: number, articleId: number): Promise<number> {
+    const key = `${RedisConstant.USER_ARTICLE_LIKE}${userId}`;
+
+    // 检查用户是否已经点赞过该文章
+    const isLiked = await this.redisService.sismember(key, articleId.toString());
+
+    // 如果用户已经点赞过，直接返回当前点赞数
+    if (isLiked) {
+      const currentLikes = await this.redisService.getHash(
+        RedisConstant.ARTICLE_LIKE_COUNT,
+        articleId.toString(),
+      );
+      return currentLikes;
+    }
+
+    // 添加用户点赞记录
+    await this.redisService.sadd(key, articleId.toString());
+
+    // 增加文章点赞数并返回新的点赞数
+    return await this.redisService.hincrby(
+      RedisConstant.ARTICLE_LIKE_COUNT,
+      articleId.toString(),
+      1,
+    );
+  }
+
+  /**
+   * 取消用户文章点赞
+   * @param userId 用户ID
+   * @param articleId 文章ID
+   * @returns 取消点赞后的数量
+   */
+  async cancelArticleLike(userId: number, articleId: number): Promise<number> {
+    const key = `${RedisConstant.USER_ARTICLE_LIKE}${userId}`;
+
+    // 检查用户是否已经点赞过该文章
+    const isLiked = await this.redisService.sismember(key, articleId.toString());
+
+    // 如果用户没有点赞过，直接返回当前点赞数
+    if (!isLiked) {
+      const currentLikes = await this.redisService.getHash(
+        RedisConstant.ARTICLE_LIKE_COUNT,
+        articleId.toString(),
+      );
+      return currentLikes;
+    }
+
+    // 移除用户点赞记录
+    await this.redisService.srem(key, articleId.toString());
+
+    // 获取当前文章点赞数
+    const currentLikes = await this.redisService.getHash(
+      RedisConstant.ARTICLE_LIKE_COUNT,
+      articleId.toString(),
+    );
+
+    // 只有当前点赞数大于0时才减少
+    if (currentLikes > 0) {
+      // 减少文章点赞数并返回新的点赞数
+      return await this.redisService.hincrby(
+        RedisConstant.ARTICLE_LIKE_COUNT,
+        articleId.toString(),
+        -1,
+      );
+    }
+
+    return 0;
+  }
+
+  /**
+   * 添加用户评论点赞
+   * @param userId 用户ID
+   * @param commentId 评论ID
+   * @returns 点赞后的数量
+   */
+  async addCommentLike(userId: number, commentId: number): Promise<number> {
+    const key = `${RedisConstant.USER_COMMENT_LIKE}${userId}`;
+
+    // 检查用户是否已经点赞过该评论
+    const isLiked = await this.redisService.sismember(key, commentId.toString());
+
+    // 如果用户已经点赞过，直接返回当前点赞数
+    if (isLiked) {
+      const currentLikes = await this.redisService.getHash(
+        RedisConstant.COMMENT_LIKE_COUNT,
+        commentId.toString(),
+      );
+      return currentLikes;
+    }
+
+    // 添加用户点赞记录
+    await this.redisService.sadd(key, commentId.toString());
+
+    // 增加评论点赞数并返回新的点赞数
+    return await this.redisService.hincrby(
+      RedisConstant.COMMENT_LIKE_COUNT,
+      commentId.toString(),
+      1,
+    );
+  }
+
+  /**
+   * 取消用户评论点赞
+   * @param userId 用户ID
+   * @param commentId 评论ID
+   * @returns 取消点赞后的数量
+   */
+  async cancelCommentLike(userId: number, commentId: number): Promise<number> {
+    const key = `${RedisConstant.USER_COMMENT_LIKE}${userId}`;
+
+    // 检查用户是否已经点赞过该评论
+    const isLiked = await this.redisService.sismember(key, commentId.toString());
+
+    // 如果用户没有点赞过，直接返回当前点赞数
+    if (!isLiked) {
+      const currentLikes = await this.redisService.getHash(
+        RedisConstant.COMMENT_LIKE_COUNT,
+        commentId.toString(),
+      );
+      return currentLikes;
+    }
+
+    // 移除用户点赞记录
+    await this.redisService.srem(key, commentId.toString());
+
+    // 获取当前评论点赞数
+    const currentLikes = await this.redisService.getHash(
+      RedisConstant.COMMENT_LIKE_COUNT,
+      commentId.toString(),
+    );
+
+    // 只有当前点赞数大于0时才减少
+    if (currentLikes > 0) {
+      // 减少评论点赞数并返回新的点赞数
+      return await this.redisService.hincrby(
+        RedisConstant.COMMENT_LIKE_COUNT,
+        commentId.toString(),
+        -1,
+      );
+    }
+
+    return 0;
+  }
+
+  /**
+   * 添加用户说说点赞
+   * @param userId 用户ID
+   * @param talkId 说说ID
+   * @returns 点赞后的数量
+   */
+  async addTalkLike(userId: number, talkId: number): Promise<number> {
+    const key = `${RedisConstant.USER_TALK_LIKE}${userId}`;
+
+    // 检查用户是否已经点赞过该说说
+    const isLiked = await this.redisService.sismember(key, talkId.toString());
+
+    // 如果用户已经点赞过，直接返回当前点赞数
+    if (isLiked) {
+      const currentLikes = await this.redisService.getHash(
+        RedisConstant.TALK_LIKE_COUNT,
+        talkId.toString(),
+      );
+      return currentLikes;
+    }
+
+    // 添加用户点赞记录
+    await this.redisService.sadd(key, talkId.toString());
+
+    // 增加说说点赞数并返回新的点赞数
+    return await this.redisService.hincrby(RedisConstant.TALK_LIKE_COUNT, talkId.toString(), 1);
+  }
+
+  /**
+   * 取消用户说说点赞
+   * @param userId 用户ID
+   * @param talkId 说说ID
+   * @returns 取消点赞后的数量
+   */
+  async cancelTalkLike(userId: number, talkId: number): Promise<number> {
+    const key = `${RedisConstant.USER_TALK_LIKE}${userId}`;
+
+    // 检查用户是否已经点赞过该说说
+    const isLiked = await this.redisService.sismember(key, talkId.toString());
+
+    // 如果用户没有点赞过，直接返回当前点赞数
+    if (!isLiked) {
+      const currentLikes = await this.redisService.getHash(
+        RedisConstant.TALK_LIKE_COUNT,
+        talkId.toString(),
+      );
+      return currentLikes;
+    }
+
+    // 移除用户点赞记录
+    await this.redisService.srem(key, talkId.toString());
+
+    // 获取当前说说点赞数
+    const currentLikes = await this.redisService.getHash(
+      RedisConstant.TALK_LIKE_COUNT,
+      talkId.toString(),
+    );
+
+    // 只有当前点赞数大于0时才减少
+    if (currentLikes > 0) {
+      // 减少说说点赞数并返回新的点赞数
+      return await this.redisService.hincrby(RedisConstant.TALK_LIKE_COUNT, talkId.toString(), -1);
+    }
+
+    return 0;
   }
 }

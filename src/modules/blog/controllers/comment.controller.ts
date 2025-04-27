@@ -1,4 +1,17 @@
-import { Controller, Get, Post, Body, Patch, Param, UseGuards, Query, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  UseGuards,
+  Query,
+  Req,
+  Request,
+  Delete,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { CommentService } from '../services/comment.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -7,18 +20,29 @@ import { Comment } from '../entities/comment.entity';
 import { OperationLog } from '../../../common/decorators/operation-log.decorator';
 import { OperationType } from '../../../common/enums/operation-type.enum';
 import { Public } from '../../../common/decorators/public.decorator';
+import { UserService } from '../../user/user.service';
+import { RedisService } from '../../../redis/redis.service';
+import { RedisConstant } from '../../../common/constants/redis.constant';
+import { CreateCommentDto } from '../dto/comment.dto';
 
 @ApiTags('评论管理')
 @Controller('comments')
 export class CommentController {
-  constructor(private readonly commentService: CommentService) {}
+  constructor(
+    private readonly commentService: CommentService,
+    private readonly userService: UserService,
+    private readonly redisService: RedisService,
+  ) {}
 
   @Post('add')
   @ApiOperation({ summary: '创建评论' })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @OperationLog(OperationType.CREATE)
-  async create(@Body() createCommentDto: any, @Req() req: any): Promise<ResultDto<Comment>> {
+  async create(
+    @Body() createCommentDto: CreateCommentDto,
+    @Req() req: any,
+  ): Promise<ResultDto<Comment>> {
     try {
       console.log('创建评论请求:', createCommentDto);
       console.log('请求用户信息:', req.user);
@@ -33,9 +57,9 @@ export class CommentController {
 
       // 根据请求体构建评论数据
       const comment: Partial<Comment> = {
-        content: createCommentDto.commentContent || createCommentDto.content,
+        content: createCommentDto.commentContent,
         typeId: createCommentDto.typeId,
-        commentType: createCommentDto.commentType || 1, // 默认为文章评论
+        commentType: createCommentDto.commentType,
         parentId: createCommentDto.parentId || 0,
         replyId: createCommentDto.replyId || 0,
         toUid: createCommentDto.toUid || 0,
@@ -89,6 +113,13 @@ export class CommentController {
 
       // 处理每条评论，获取其回复列表
       for (const comment of comments) {
+        // 获取评论点赞数
+        const likeCount =
+          (await this.redisService.getHash(
+            RedisConstant.COMMENT_LIKE_COUNT,
+            comment.id.toString(),
+          )) || 0;
+
         // 查询该评论的回复列表（限制3条）
         const replies = await this.commentService.getReplies(comment.id, 1, 3, showAll);
         const replyCount = await this.commentService.getReplyCount(comment.id);
@@ -98,6 +129,13 @@ export class CommentController {
 
         // 为每条回复获取被回复用户的昵称
         for (const reply of replies) {
+          // 获取回复的点赞数
+          const replyLikeCount =
+            (await this.redisService.getHash(
+              RedisConstant.COMMENT_LIKE_COUNT,
+              reply.id.toString(),
+            )) || 0;
+
           let toNickname = '';
 
           // 如果有指定回复用户ID，查找被回复用户
@@ -124,7 +162,7 @@ export class CommentController {
             toNickname: toNickname,
             commentContent: reply.content,
             createTime: reply.createTime,
-            likeCount: 0, // 默认点赞数量为0
+            likeCount: replyLikeCount,
           });
         }
 
@@ -136,7 +174,7 @@ export class CommentController {
           avatar: comment.user?.avatar || 'http://img.conder.top/config/default_avatar.jpg',
           commentContent: comment.content,
           createTime: comment.createTime,
-          likeCount: 0, // 默认点赞数量为0
+          likeCount: likeCount,
           replyCount: replyCount, // 实际回复数量
           replyVOList: replyVOList, // 前3条回复列表
         });
@@ -233,34 +271,55 @@ export class CommentController {
       const comments = await this.commentService.findByArticleId(articleId, showAll);
 
       // 转换为前端期望的格式
-      const formattedComments = comments.map((comment) => {
+      const formattedComments = [];
+
+      for (const comment of comments) {
+        // 获取评论点赞数
+        const likeCount =
+          (await this.redisService.getHash(
+            RedisConstant.COMMENT_LIKE_COUNT,
+            comment.id.toString(),
+          )) || 0;
+
         // 格式化子评论
-        const replyVOList =
-          comment.children?.map((reply) => ({
-            id: reply.id,
-            fromNickname: reply.user?.nickname || reply.user?.username || '匿名用户',
-            fromUid: reply.userId,
-            avatar: reply.user?.avatar || 'http://img.conder.top/config/default_avatar.jpg',
-            toUid: reply.toUid,
-            toNickname: '', // 需要单独获取
-            commentContent: reply.content,
-            createTime: reply.createTime,
-            likeCount: 0, // 默认点赞数量为0
-          })) || [];
+        const replyVOList = [];
+
+        if (comment.children && comment.children.length > 0) {
+          for (const reply of comment.children) {
+            // 获取回复的点赞数
+            const replyLikeCount =
+              (await this.redisService.getHash(
+                RedisConstant.COMMENT_LIKE_COUNT,
+                reply.id.toString(),
+              )) || 0;
+
+            replyVOList.push({
+              id: reply.id,
+              fromNickname: reply.user?.nickname || reply.user?.username || '匿名用户',
+              fromUid: reply.userId,
+              avatar: reply.user?.avatar || 'http://img.conder.top/config/default_avatar.jpg',
+              toUid: reply.toUid,
+              toNickname: '', // 需要单独获取
+              commentContent: reply.content,
+              createTime: reply.createTime,
+              likeCount: replyLikeCount,
+            });
+          }
+        }
 
         // 格式化主评论
-        return {
+        formattedComments.push({
           id: comment.id,
           fromNickname: comment.user?.nickname || comment.user?.username || '匿名用户',
           fromUid: comment.userId,
           avatar: comment.user?.avatar || 'http://img.conder.top/config/default_avatar.jpg',
           commentContent: comment.content,
           createTime: comment.createTime,
-          likeCount: 0, // 默认点赞数量为0，实际应从点赞表中获取
+          likeCount: likeCount,
           replyCount: comment['replyCount'] || comment.children?.length || 0,
           replyVOList: replyVOList,
-        };
-      });
+        });
+      }
 
       console.log(`格式化后的评论树结果: ${formattedComments.length}条评论`);
       return ResultDto.success(formattedComments);
@@ -287,20 +346,29 @@ export class CommentController {
       const approvedComments = comments.filter((comment) => comment.isCheck === 1);
 
       // 转换为前端期望的格式
-      const formattedComments = approvedComments.map((comment) => {
+      const formattedComments = [];
+
+      for (const comment of approvedComments) {
+        // 获取评论点赞数
+        const likeCount =
+          (await this.redisService.getHash(
+            RedisConstant.COMMENT_LIKE_COUNT,
+            comment.id.toString(),
+          )) || 0;
+
         // 子评论列表将通过另一个API获取
-        return {
+        formattedComments.push({
           id: comment.id,
           fromNickname: comment.user?.nickname || comment.user?.username || '匿名用户',
           fromUid: comment.userId,
           avatar: comment.user?.avatar || 'http://img.conder.top/config/default_avatar.jpg',
           commentContent: comment.content,
           createTime: comment.createTime,
-          likeCount: 0, // 默认点赞数量为0
+          likeCount: likeCount,
           replyCount: 0, // 将通过单独查询获取
           replyVOList: [], // 初始为空，会由前端按需加载
-        };
-      });
+        });
+      }
 
       console.log(`格式化后的评论树结果: ${formattedComments.length}条评论`);
       return ResultDto.success(formattedComments);
@@ -331,5 +399,135 @@ export class CommentController {
   ): Promise<ResultDto<Comment>> {
     const result = await this.commentService.update(+id, updateCommentDto);
     return ResultDto.success(result);
+  }
+
+  /**
+   * 点赞或取消点赞评论
+   */
+  @Post(':id/like')
+  @ApiOperation({ summary: '点赞或取消点赞评论' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async likeComment(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('type') type: string = 'like',
+    @Request() req,
+  ): Promise<ResultDto<any>> {
+    try {
+      const userId = req.user.id;
+      let likeCount;
+
+      if (type === 'unlike') {
+        // 取消点赞
+        likeCount = await this.userService.cancelCommentLike(userId, id);
+        return ResultDto.success({ likeCount }, '取消点赞成功');
+      } else {
+        // 默认为点赞
+        likeCount = await this.userService.addCommentLike(userId, id);
+        return ResultDto.success({ likeCount }, '点赞成功');
+      }
+    } catch (error) {
+      const action = type === 'unlike' ? '取消点赞' : '点赞';
+      return ResultDto.fail(`${action}失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 取消点赞评论
+   */
+  @Delete(':id/like')
+  @ApiOperation({ summary: '取消点赞评论' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async unlikeComment(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req,
+  ): Promise<ResultDto<any>> {
+    try {
+      const userId = req.user.id;
+      const likeCount = await this.userService.cancelCommentLike(userId, id);
+
+      return ResultDto.success({ likeCount }, '取消点赞成功');
+    } catch (error) {
+      return ResultDto.fail('取消点赞失败: ' + error.message);
+    }
+  }
+
+  /**
+   * 获取评论回复列表
+   */
+  @Get(':commentId/reply')
+  @ApiOperation({ summary: '获取评论的回复列表' })
+  @ApiParam({ name: 'commentId', description: '评论ID' })
+  async getReplyList(
+    @Param('commentId') commentId: number,
+    @Query() query: any,
+  ): Promise<ResultDto<any[]>> {
+    try {
+      console.log(`获取评论回复列表, 评论ID: ${commentId}`);
+      const page = Number(query.current) || Number(query.page) || 1;
+      const limit = Number(query.size) || Number(query.limit) || 5;
+
+      // 获取回复
+      const replies = await this.commentService.getReplies(commentId, page, limit);
+
+      // 首先获取父评论信息，用于处理回复主评论的情况
+      const parentComment = await this.commentService.findById(commentId);
+      const parentUserNickname =
+        parentComment?.user?.nickname || parentComment?.user?.username || '未知用户';
+
+      // 格式化为前端期望的格式
+      const formattedReplies = [];
+
+      for (const reply of replies) {
+        let toNickname = '';
+        // 获取被回复用户的昵称
+        if (reply.toUid) {
+          try {
+            console.log(`查询被回复用户, 用户ID: ${reply.toUid}`);
+            const toUser = await this.userService.findById(reply.toUid);
+            if (toUser) {
+              toNickname = toUser.nickname || toUser.username || '未知用户';
+              console.log(`找到被回复用户昵称: ${toNickname}`);
+            } else {
+              console.log(`未找到被回复用户, ID: ${reply.toUid}`);
+              toNickname = '未知用户';
+            }
+          } catch (error) {
+            console.error(`查询被回复用户昵称失败, 用户ID: ${reply.toUid}`, error);
+            toNickname = '未知用户';
+          }
+        } else {
+          // 如果没有toUserId，则是回复主评论
+          toNickname = parentUserNickname;
+          console.log(`回复主评论，使用父评论用户昵称: ${toNickname}`);
+        }
+
+        // 获取回复的点赞数
+        const likeCount =
+          (await this.redisService.getHash(
+            RedisConstant.COMMENT_LIKE_COUNT,
+            reply.id.toString(),
+          )) || 0;
+
+        formattedReplies.push({
+          id: reply.id,
+          fromNickname: reply.user?.nickname || reply.user?.username || '匿名用户',
+          fromUid: reply.userId,
+          avatar: reply.user?.avatar || 'http://img.conder.top/config/default_avatar.jpg',
+          toUid: reply.toUid || parentComment?.userId,
+          toNickname: toNickname,
+          commentContent: reply.content,
+          createTime: reply.createTime,
+          likeCount: likeCount, // 使用从Redis获取的点赞数
+        });
+      }
+
+      console.log(`格式化完成, 获取到${formattedReplies.length}条回复`);
+      return ResultDto.success(formattedReplies);
+    } catch (error) {
+      console.error('获取评论回复列表失败:', error);
+      return ResultDto.fail('获取评论回复列表失败: ' + error.message);
+    }
   }
 }

@@ -17,7 +17,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     '/auth/login',
     '/admin/auth/login',
     '/users/register',
-    '/articles',
+    '/articles', // 文章列表公开
+    '/articles/list', // 文章列表公开
+    '/articles/recommend', // 推荐文章公开
+    '/articles/search', // 文章搜索公开
     '/categories',
     '/tags',
     '/comments/list',
@@ -39,6 +42,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     '/v3/api-docs',
     '/favicon.ico',
   ];
+
+  // 需要精确匹配的路径（不应用于子路径）
+  private readonly exactMatchPaths: string[] = ['/articles'];
 
   canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -83,8 +89,27 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       // 移除查询参数
       const path = url.split('?')[0];
 
+      // 检查是否完全匹配公开路径
+      if (this.publicPaths.includes(path)) {
+        this.logger.log(`Path ${path} exactly matches a public path, skipping authentication`);
+        return true;
+      }
+
+      // 检查是否是需要子路径匹配的公开路径
       for (const publicPath of this.publicPaths) {
-        if (path === publicPath || path.startsWith(publicPath + '/')) {
+        // 如果是精确匹配路径，则跳过子路径匹配
+        if (this.exactMatchPaths.includes(publicPath)) {
+          continue;
+        }
+
+        // 对于其他路径，检查是否以公开路径开头，并且后面跟着/或结束
+        if (path.startsWith(publicPath + '/')) {
+          // 特殊处理点赞路径，确保像/articles/123/like这样的路径需要认证
+          if (path.match(/\/articles\/\d+\/like$/)) {
+            this.logger.log(`Path ${path} is an article like endpoint, requiring authentication`);
+            break; // 跳出循环，进行认证
+          }
+
           this.logger.log(
             `Path ${path} matches public path ${publicPath}, skipping authentication`,
           );

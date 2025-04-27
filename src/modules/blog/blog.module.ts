@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { IpService } from '../../services/ip.service';
 import { ToolsModule } from '../tools/tools.module';
 import { LogModule } from '../log/log.module';
+import { RedisModule } from '../../redis/redis.module';
 
 // 实体
 import { Article } from './entities/article.entity';
@@ -131,6 +132,7 @@ import { VisitLogInterceptor } from '../../common/interceptors/visit-log.interce
     HttpModule,
     ToolsModule,
     LogModule,
+    RedisModule,
   ],
   controllers: [
     ArticleController,

@@ -26,7 +26,8 @@ export async function initSiteConfig(siteConfigRepository: Repository<SiteConfig
       siteName: "Conder's blog",
       siteAddress: 'https://www.conder.top',
       siteIntro: '每天进步一点点。',
-      siteNotice: '后端基于NestJs开发，前端基于Vue3 Ts Navie UI开发',
+      siteNotice:
+        '小站新开，有点小bug很正常，欢迎大家来多多测试。\n后端基于NestJs开发，前端基于Vue3 Ts Navie UI开发',
       createSiteTime: '2025-5-20',
       recordNumber: '豫ICP备2024068028号-1',
       authorAvatar: 'http://img.conder.top/config/avatar.jpg',
@@ -48,7 +49,7 @@ export async function initSiteConfig(siteConfigRepository: Repository<SiteConfig
       isMusic: true,
       musicId: '13616943965',
       isChat: true,
-      websocketUrl: 'wss://www.conder.top/websocket/',
+      websocketUrl: 'ws://localhost:3300/chat',
       archiveWallpaper: '',
       categoryWallpaper: '',
       tagWallpaper: '',

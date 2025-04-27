@@ -6,6 +6,8 @@ import { Tag } from '../entities/tag.entity';
 import { CategoryService } from './category.service';
 import { TagService } from './tag.service';
 import { Comment } from '../entities/comment.entity';
+import { RedisService } from '../../../redis/redis.service';
+import { RedisConstant } from '../../../common/constants/redis.constant';
 
 @Injectable()
 export class ArticleService {
@@ -18,6 +20,7 @@ export class ArticleService {
     private readonly tagService: TagService,
     @InjectRepository(Comment)
     private readonly commentRepository: Repository<Comment>,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -304,5 +307,94 @@ export class ArticleService {
     }) as Article[];
 
     return recordList;
+  }
+
+  /**
+   * 增加文章点赞数
+   * @param articleId 文章ID
+   * @returns 增加后的点赞数
+   */
+  async incrementLikes(articleId: number): Promise<number> {
+    try {
+      const newCount = await this.redisService.hincrby(
+        RedisConstant.ARTICLE_LIKE_COUNT,
+        articleId.toString(),
+        1,
+      );
+      return newCount;
+    } catch (error) {
+      console.error(`增加文章点赞数失败: ${error.message}`);
+      return 0;
+    }
+  }
+
+  /**
+   * 减少文章点赞数
+   * @param articleId 文章ID
+   * @returns 减少后的点赞数
+   */
+  async decrementLikes(articleId: number): Promise<number> {
+    try {
+      // 获取当前点赞数
+      const currentCount = await this.redisService.getHash(
+        RedisConstant.ARTICLE_LIKE_COUNT,
+        articleId.toString(),
+      );
+
+      // 如果当前点赞数大于0，才减少
+      if (currentCount > 0) {
+        const newCount = await this.redisService.hincrby(
+          RedisConstant.ARTICLE_LIKE_COUNT,
+          articleId.toString(),
+          -1,
+        );
+        return newCount;
+      }
+
+      return currentCount;
+    } catch (error) {
+      console.error(`减少文章点赞数失败: ${error.message}`);
+      return 0;
+    }
+  }
+
+  /**
+   * 获取文章点赞数
+   * @param articleId 文章ID
+   * @returns 点赞数
+   */
+  async getLikeCount(articleId: number): Promise<number> {
+    try {
+      return await this.redisService.getHash(
+        RedisConstant.ARTICLE_LIKE_COUNT,
+        articleId.toString(),
+      );
+    } catch (error) {
+      console.error(`获取文章点赞数失败: ${error.message}`);
+      return 0;
+    }
+  }
+
+  /**
+   * 获取多个文章的点赞数
+   * @param articleIds 文章ID数组
+   * @returns 文章ID与点赞数的映射
+   */
+  async getLikeCounts(articleIds: number[]): Promise<Record<string, number>> {
+    try {
+      const likeCountMap = await this.redisService.getHashAll(RedisConstant.ARTICLE_LIKE_COUNT);
+
+      // 过滤出请求的文章ID的点赞数
+      const result: Record<string, number> = {};
+      for (const articleId of articleIds) {
+        const id = articleId.toString();
+        result[id] = likeCountMap[id] || 0;
+      }
+
+      return result;
+    } catch (error) {
+      console.error(`获取多篇文章点赞数失败: ${error.message}`);
+      return {};
+    }
   }
 }

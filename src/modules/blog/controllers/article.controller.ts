@@ -13,6 +13,8 @@ import {
   UseInterceptors,
   Res,
   HttpStatus,
+  Request,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -41,6 +43,7 @@ import { CommentService } from '../services/comment.service';
 import { Response } from 'express';
 import { ArticleSearch } from '../dtos/article-search.dto';
 import { SiteConfig } from '../entities/site-config.entity';
+import { UserService } from '../../user/user.service';
 
 // 前台文章控制器
 @ApiTags('文章')
@@ -57,6 +60,7 @@ export class ArticleController {
     private readonly tagRepository: Repository<Tag>,
     @InjectRepository(SiteConfig)
     private readonly siteConfigRepository: Repository<SiteConfig>,
+    private readonly userService: UserService,
   ) {}
 
   @Post()
@@ -202,6 +206,52 @@ export class ArticleController {
 
     const result = await this.articleService.update(+id, article, tagIds);
     return ResultDto.success(result);
+  }
+
+  // 添加点赞文章的API
+  @Post(':id/like')
+  @ApiOperation({ summary: '点赞或取消点赞文章' })
+  @ApiBearerAuth()
+  async likeArticle(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('type') type: string, // 添加type查询参数
+    @Request() req,
+  ): Promise<ResultDto<any>> {
+    try {
+      const userId = req.user.id;
+      let likeCount: number;
+
+      // 根据type参数决定是点赞还是取消点赞
+      if (type === 'unlike') {
+        // 取消点赞
+        likeCount = await this.userService.cancelArticleLike(userId, id);
+        return ResultDto.success({ likeCount }, '取消点赞成功');
+      } else {
+        // 点赞
+        likeCount = await this.userService.addArticleLike(userId, id);
+        return ResultDto.success({ likeCount }, '点赞成功');
+      }
+    } catch (error) {
+      return ResultDto.fail(`${type === 'unlike' ? '取消点赞' : '点赞'}失败: ${error.message}`);
+    }
+  }
+
+  // 保留DELETE方法的API，但内部逻辑与POST+type=unlike相同
+  @Delete(':id/like')
+  @ApiOperation({ summary: '取消点赞文章' })
+  @ApiBearerAuth()
+  async unlikeArticle(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req,
+  ): Promise<ResultDto<any>> {
+    try {
+      const userId = req.user.id;
+      const likeCount = await this.userService.cancelArticleLike(userId, id);
+
+      return ResultDto.success({ likeCount }, '取消点赞成功');
+    } catch (error) {
+      return ResultDto.fail('取消点赞失败: ' + error.message);
+    }
   }
 }
 

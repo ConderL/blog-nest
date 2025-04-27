@@ -18,6 +18,7 @@ import { AdminRoleController } from './controllers/admin-role.controller';
 import { UploadModule } from '../upload/upload.module';
 import { SiteConfigService } from '../blog/services/site-config.service';
 import { SiteConfig } from '../blog/entities/site-config.entity';
+import { RedisModule } from '../../redis/redis.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { SiteConfig } from '../blog/entities/site-config.entity';
       inject: [ConfigService],
     }),
     UploadModule,
+    RedisModule,
   ],
   controllers: [
     UserController,
